@@ -47,27 +47,60 @@
 - CI/CD 파이프라인 설계 및 구현
 - 클라우드 네이티브 애플리케이션 배포 및 관리
 
-## 시스템 아키텍처
+## 시스템 요구사항
 
-### 전체 구성도
+### 하드웨어 요구사항
+
+#### OpenStack 서버 (데스크톱 권장)
+- **CPU**: 8코어 이상 (가상화 지원 필수)
+- **메모리**: 32GB RAM 이상
+- **스토리지**: 500GB SSD 이상
+- **네트워크**: 기가비트 이더넷
+
+#### 개발 환경 (Windows 노트북)
+- **OS**: Windows 10/11
+- **메모리**: 8GB RAM 이상
+- **스토리지**: 100GB 이상
+- **소프트웨어**: VSCode + Remote SSH 확장
+
+### 소프트웨어 요구사항
+- **OpenStack 서버**: Ubuntu 22.04 LTS
+- **개발 환경**: Windows/Mac/Linux + VSCode
+- **네트워크**: SSH 접속 가능한 환경
+
+## 개발 환경 구성
+
+### 권장 구성 (분산 환경)
 ```
-[물리 서버]
-    ↓
-[하이퍼바이저 (KVM/QEMU)]
-    ↓
-[OpenStack 클라우드 플랫폼]
-    ↓
-[가상 머신 인스턴스들]
-    ↓
-[Kubernetes 클러스터]
-    ↓
-[컨테이너화된 애플리케이션]
+[데스크톱] - OpenStack 서버
+├── Ubuntu 22.04 LTS
+├── KVM 하이퍼바이저
+├── OpenStack 플랫폼
+└── Kubernetes VM들
+
+[노트북] - Windows 개발 환경
+├── Windows 10/11
+├── VSCode + Remote SSH
+├── Git for Windows
+└── SSH 클라이언트
 ```
 
-### 네트워크 구성
-- 관리 네트워크: OpenStack 컴포넌트 간 통신
-- 테넌트 네트워크: 격리된 사용자 환경
-- 외부 네트워크: 인터넷 연결 및 외부 접근
+### 연결 구조
+```
+Windows 노트북 (VSCode) → SSH → 데스크톱 Ubuntu → Terraform → OpenStack VMs
+```
+
+### 개발 워크플로우
+1. **Windows 노트북**에서 VSCode로 코드 작성
+2. **Remote SSH**로 데스크톱 Ubuntu에 접속
+3. **Ubuntu 터미널**에서 Terraform 명령어 실행
+4. **OpenStack**에서 자동으로 VM 생성 및 관리
+
+### 장점
+- **익숙한 환경**: Windows VSCode 그대로 사용
+- **성능 최적화**: 고사양 데스크톱으로 서버 운영
+- **원격 개발**: SSH로 언제 어디서나 접속 가능
+- **리소스 효율성**: 각 장비의 최적 활용
 
 ## 프로젝트 구조
 
@@ -75,85 +108,60 @@
 openstack-cicd-platform/
 ├── README.md                          # 프로젝트 개요
 ├── docs/                             # 문서
-│   ├── installation.md                # 1-3단계 설치 가이드
-│   ├── terraform-setup.md             # 4단계 Terraform 설정
-│   ├── kubernetes-setup.md            # 5단계 K8s 클러스터 구축
-│   ├── jenkins-setup.md               # 6단계 CI/CD 파이프라인
-│   └── troubleshooting.md             # 문제 해결
+│   ├── 01-environment-setup.md       # 환경 준비 및 OpenStack 설치
+│   ├── 02-infrastructure-automation.md # Terraform 인프라 자동화
+│   ├── 03-kubernetes-deployment.md    # Kubernetes 클러스터 구축
+│   ├── 04-cicd-pipeline.md           # Jenkins CI/CD 구축
+│   ├── 05-monitoring-setup.md        # 모니터링 시스템 구축
+│   └── troubleshooting.md            # 문제 해결
 │
 ├── infrastructure/                   # 인프라 코드
-│   ├── terraform/                     # Terraform 관리
-│   │   ├── main.tf                     # 메인 설정
-│   │   ├── variables.tf                # 변수 정의
-│   │   ├── outputs.tf                  # 출력 정의
-│   │   ├── versions.tf                 # 프로바이더 설정
-│   │   ├── modules/                    # 재사용 모듈
-│   │   │   ├── network/                 # 네트워크 모듈
-│   │   │   ├── compute/                 # 컴퓨팅 모듈
-│   │   │   └── security/                # 보안 그룹 모듈
-│   │   └── environments/               # 환경별 설정
-│   │       ├── dev/                     # 개발 환경
-│   │       ├── staging/                 # 스테이징 환경
-│   │       └── prod/                    # 프로덕션 환경
-│   ├── openstack/                     # OpenStack 설정
-│   │   ├── devstack/                 
-│   │   │   ├── local.conf               # DevStack 설정
-│   │   │   └── setup.sh                 # 설치 스크립트
-│   │   └── scripts/                    # 관리 스크립트
-│   └── hypervisor/                    # 하이퍼바이저 설정
-│       └── setup-kvm.sh                # KVM 설치
+│   ├── setup/                        # 초기 환경 설정
+│   │   ├── install-hypervisor.sh     # KVM/QEMU 설치
+│   │   ├── install-openstack.sh      # OpenStack 설치
+│   │   └── local.conf                # DevStack 설정
+│   ├── terraform/                    # Terraform 관리
+│   │   ├── main.tf                   # 메인 설정
+│   │   ├── variables.tf              # 변수 정의
+│   │   └── outputs.tf                # 출력 정의
+│   └── scripts/                      # 유틸리티 스크립트
+│       ├── deploy-infra.sh           # 인프라 배포
+│       └── cleanup-infra.sh          # 인프라 정리
 │
-├── kubernetes/                       # K8s 클러스터 설정
-│   ├── cluster-setup/                 # 클러스터 구축
-│   │   ├── kubeadm-config.yaml         # kubeadm 설정
-│   │   ├── init-master.sh              # 마스터 노드 초기화
-│   │   ├── join-workers.sh             # 워커 노드 조인
-│   │   ├── install-calico.sh           # 네트워크 플러그인
-│   │   └── setup-worker.sh             # 워커 노드 설정
-│   ├── manifests/                     # K8s 리소스 정의
-│   │   ├── namespaces/                 # 네임스페이스
-│   │   ├── rbac/                       # 권한 설정
-│   │   ├── network-policies/           # 네트워크 정책
-│   │   └── storage/                    # 스토리지 클래스
-│   └── apply-configs.sh               # 설정 적용
+├── kubernetes/                       # Kubernetes 설정
+│   ├── setup-cluster.sh              # 클러스터 구축
+│   ├── cluster-config.yaml           # 클러스터 설정
+│   └── manifests/                    # K8s 리소스
+│       ├── namespaces.yaml           # 네임스페이스
+│       ├── rbac.yaml                 # 권한 설정
+│       └── storage.yaml              # 스토리지 설정
 │
-├── ci-cd/                           # CI/CD 파이프라인
-│   ├── jenkins/                      # Jenkins 설정
-│   │   ├── Dockerfile                 # 커스텀 Jenkins 이미지
-│   │   ├── namespace.yaml             # Jenkins 네임스페이스
-│   │   ├── deployment.yaml            # Jenkins 배포
-│   │   ├── service.yaml               # Jenkins 서비스
-│   │   ├── pvc.yaml                   # 영구 볼륨
-│   │   ├── jenkins.yaml               # JCasC 설정
-│   │   ├── plugins.txt                # 플러그인 목록
-│   │   ├── jobs/                      # 파이프라인 정의
-│   │   └── pipeline-library/          # 파이프라인 라이브러리
-│   └── pipelines/                    # 파이프라인 코드
+├── cicd/                            # CI/CD 파이프라인
+│   ├── jenkins/                     # Jenkins 설정
+│   │   ├── deploy-jenkins.sh         # Jenkins 설치
+│   │   ├── jenkins-config.yaml       # Jenkins 설정
+│   │   └── Dockerfile                # 커스텀 이미지
+│   └── pipelines/                   # 파이프라인 정의
+│       └── Jenkinsfile               # 파이프라인 코드
 │
 ├── monitoring/                      # 모니터링 시스템
-│   ├── prometheus/                   # 메트릭 수집
-│   │   └── prometheus.yml           
-│   ├── grafana/                      # 시각화 대시보드
-│   │   └── dashboards/              
-│   └── elk/                          # 로깅 시스템
-│       └── docker-compose.yml       
+│   ├── deploy-monitoring.sh          # 모니터링 설치
+│   ├── prometheus.yaml               # Prometheus 설정
+│   └── grafana-dashboards/           # Grafana 대시보드
 │
 ├── applications/                    # 샘플 애플리케이션
-│   └── demo-app/                     # 테스트 앱
-│       ├── app.py                     # Flask 애플리케이션
-│       ├── Dockerfile                 # 컨테이너 이미지
-│       ├── requirements.txt           # Python 의존성
-│       └── k8s-manifests/             # K8s 배포 매니페스트
+│   └── demo-app/                    # 테스트 앱
+│       ├── app.py                    # 애플리케이션 코드
+│       ├── Dockerfile                # 컨테이너 이미지
+│       └── k8s-deploy.yaml           # K8s 배포 매니페스트
 │
 ├── scripts/                         # 자동화 스크립트
-│   ├── setup-kubernetes.sh           # K8s 클러스터 설정
-│   ├── deploy-infrastructure.sh      # 인프라 배포
-│   ├── setup-cicd.sh                 # CI/CD 환경 구축
-│   ├── test-deployment.sh            # 배포 테스트
-│   └── cleanup.sh                    # 환경 정리
+│   ├── setup-all.sh                 # 전체 환경 구축
+│   ├── deploy-app.sh                 # 애플리케이션 배포
+│   └── cleanup-all.sh                # 전체 환경 정리
 │
 ├── .gitignore                       # Git 제외 파일
-├── Jenkinsfile                      # 멀티브랜치 파이프라인
+├── Jenkinsfile                      # 루트 파이프라인
 ├── docker-compose.yml               # 로컬 개발 환경
 └── Makefile                         # 빌드 명령어
 ```
@@ -245,4 +253,3 @@ openstack-cicd-platform/
 ## 라이선스
 
 이 프로젝트는 MIT 라이선스 하에 배포됩니다.
-
