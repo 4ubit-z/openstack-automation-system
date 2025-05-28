@@ -75,82 +75,82 @@
 openstack-cicd-platform/
 ├── README.md                          # 프로젝트 개요
 ├── docs/                             # 문서
-│   ├── installation.md               # 1-3단계 설치 가이드
-│   ├── terraform-setup.md            # 4단계 Terraform 설정
-│   ├── kubernetes-setup.md           # 5단계 K8s 클러스터 구축
-│   ├── jenkins-setup.md              # 6단계 CI/CD 파이프라인
-│   └── troubleshooting.md            # 문제 해결
+│   ├── installation.md                # 1-3단계 설치 가이드
+│   ├── terraform-setup.md             # 4단계 Terraform 설정
+│   ├── kubernetes-setup.md            # 5단계 K8s 클러스터 구축
+│   ├── jenkins-setup.md               # 6단계 CI/CD 파이프라인
+│   └── troubleshooting.md             # 문제 해결
 │
 ├── infrastructure/                   # 인프라 코드
-│   ├── terraform/                    # Terraform 관리
-│   │   ├── main.tf                   # 메인 설정
-│   │   ├── variables.tf              # 변수 정의
-│   │   ├── outputs.tf                # 출력 정의
-│   │   ├── versions.tf               # 프로바이더 설정
-│   │   ├── modules/                  # 재사용 모듈
-│   │   │   ├── network/              # 네트워크 모듈
-│   │   │   ├── compute/              # 컴퓨팅 모듈
-│   │   │   └── security/             # 보안 그룹 모듈
-│   │   └── environments/             # 환경별 설정
-│   │       ├── dev/                  # 개발 환경
-│   │       ├── staging/              # 스테이징 환경
-│   │       └── prod/                 # 프로덕션 환경
-│   ├── openstack/                    # OpenStack 설정
+│   ├── terraform/                     # Terraform 관리
+│   │   ├── main.tf                     # 메인 설정
+│   │   ├── variables.tf                # 변수 정의
+│   │   ├── outputs.tf                  # 출력 정의
+│   │   ├── versions.tf                 # 프로바이더 설정
+│   │   ├── modules/                    # 재사용 모듈
+│   │   │   ├── network/                 # 네트워크 모듈
+│   │   │   ├── compute/                 # 컴퓨팅 모듈
+│   │   │   └── security/                # 보안 그룹 모듈
+│   │   └── environments/               # 환경별 설정
+│   │       ├── dev/                     # 개발 환경
+│   │       ├── staging/                 # 스테이징 환경
+│   │       └── prod/                    # 프로덕션 환경
+│   ├── openstack/                     # OpenStack 설정
 │   │   ├── devstack/                 
-│   │   │   ├── local.conf            # DevStack 설정
-│   │   │   └── setup.sh              # 설치 스크립트
-│   │   └── scripts/                  # 관리 스크립트
-│   └── hypervisor/                   # 하이퍼바이저 설정
-│       └── setup-kvm.sh              # KVM 설치
+│   │   │   ├── local.conf               # DevStack 설정
+│   │   │   └── setup.sh                 # 설치 스크립트
+│   │   └── scripts/                    # 관리 스크립트
+│   └── hypervisor/                    # 하이퍼바이저 설정
+│       └── setup-kvm.sh                # KVM 설치
 │
 ├── kubernetes/                       # K8s 클러스터 설정
-│   ├── cluster-setup/                # 클러스터 구축
-│   │   ├── kubeadm-config.yaml       # kubeadm 설정
-│   │   ├── init-master.sh            # 마스터 노드 초기화
-│   │   ├── join-workers.sh           # 워커 노드 조인
-│   │   ├── install-calico.sh         # 네트워크 플러그인
-│   │   └── setup-worker.sh           # 워커 노드 설정
-│   ├── manifests/                    # K8s 리소스 정의
-│   │   ├── namespaces/               # 네임스페이스
-│   │   ├── rbac/                     # 권한 설정
-│   │   ├── network-policies/         # 네트워크 정책
-│   │   └── storage/                  # 스토리지 클래스
-│   └── apply-configs.sh              # 설정 적용
+│   ├── cluster-setup/                 # 클러스터 구축
+│   │   ├── kubeadm-config.yaml         # kubeadm 설정
+│   │   ├── init-master.sh              # 마스터 노드 초기화
+│   │   ├── join-workers.sh             # 워커 노드 조인
+│   │   ├── install-calico.sh           # 네트워크 플러그인
+│   │   └── setup-worker.sh             # 워커 노드 설정
+│   ├── manifests/                     # K8s 리소스 정의
+│   │   ├── namespaces/                 # 네임스페이스
+│   │   ├── rbac/                       # 권한 설정
+│   │   ├── network-policies/           # 네트워크 정책
+│   │   └── storage/                    # 스토리지 클래스
+│   └── apply-configs.sh               # 설정 적용
 │
 ├── ci-cd/                           # CI/CD 파이프라인
-│   ├── jenkins/                     # Jenkins 설정
-│   │   ├── Dockerfile               # 커스텀 Jenkins 이미지
-│   │   ├── namespace.yaml            # Jenkins 네임스페이스
-│   │   ├── deployment.yaml           # Jenkins 배포
-│   │   ├── service.yaml              # Jenkins 서비스
-│   │   ├── pvc.yaml                  # 영구 볼륨
-│   │   ├── jenkins.yaml              # JCasC 설정
-│   │   ├── plugins.txt               # 플러그인 목록
-│   │   ├── jobs/                     # 파이프라인 정의
-│   │   └── pipeline-library/         # 파이프라인 라이브러리
-│   └── pipelines/                   # 파이프라인 코드
+│   ├── jenkins/                      # Jenkins 설정
+│   │   ├── Dockerfile                 # 커스텀 Jenkins 이미지
+│   │   ├── namespace.yaml             # Jenkins 네임스페이스
+│   │   ├── deployment.yaml            # Jenkins 배포
+│   │   ├── service.yaml               # Jenkins 서비스
+│   │   ├── pvc.yaml                   # 영구 볼륨
+│   │   ├── jenkins.yaml               # JCasC 설정
+│   │   ├── plugins.txt                # 플러그인 목록
+│   │   ├── jobs/                      # 파이프라인 정의
+│   │   └── pipeline-library/          # 파이프라인 라이브러리
+│   └── pipelines/                    # 파이프라인 코드
 │
 ├── monitoring/                      # 모니터링 시스템
-│   ├── prometheus/                  # 메트릭 수집
+│   ├── prometheus/                   # 메트릭 수집
 │   │   └── prometheus.yml           
-│   ├── grafana/                     # 시각화 대시보드
+│   ├── grafana/                      # 시각화 대시보드
 │   │   └── dashboards/              
-│   └── elk/                         # 로깅 시스템
+│   └── elk/                          # 로깅 시스템
 │       └── docker-compose.yml       
 │
 ├── applications/                    # 샘플 애플리케이션
-│   └── demo-app/                    # 테스트 앱
-│       ├── app.py                    # Flask 애플리케이션
-│       ├── Dockerfile                # 컨테이너 이미지
-│       ├── requirements.txt          # Python 의존성
-│       └── k8s-manifests/            # K8s 배포 매니페스트
+│   └── demo-app/                     # 테스트 앱
+│       ├── app.py                     # Flask 애플리케이션
+│       ├── Dockerfile                 # 컨테이너 이미지
+│       ├── requirements.txt           # Python 의존성
+│       └── k8s-manifests/             # K8s 배포 매니페스트
 │
 ├── scripts/                         # 자동화 스크립트
-│   ├── setup-kubernetes.sh          # K8s 클러스터 설정
-│   ├── deploy-infrastructure.sh     # 인프라 배포
-│   ├── setup-cicd.sh                # CI/CD 환경 구축
-│   ├── test-deployment.sh           # 배포 테스트
-│   └── cleanup.sh                   # 환경 정리
+│   ├── setup-kubernetes.sh           # K8s 클러스터 설정
+│   ├── deploy-infrastructure.sh      # 인프라 배포
+│   ├── setup-cicd.sh                 # CI/CD 환경 구축
+│   ├── test-deployment.sh            # 배포 테스트
+│   └── cleanup.sh                    # 환경 정리
 │
 ├── .gitignore                       # Git 제외 파일
 ├── Jenkinsfile                      # 멀티브랜치 파이프라인
