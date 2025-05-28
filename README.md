@@ -1,4 +1,4 @@
-# OpenStack 기반 멀티 테넌트 CI/CD 및 Kubernetes 개발 플랫폼 구축
+# OpenStack 기반 멀티 테넌트 <br> CI/CD 및 Kubernetes 개발 플랫폼 구축
 
 ## 프로젝트 개요
 
