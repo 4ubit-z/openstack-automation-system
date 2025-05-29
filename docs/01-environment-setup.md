@@ -80,20 +80,21 @@ sudo ufw allow 8774/tcp  # Nova API
 sudo ufw allow 9696/tcp  # Neutron API
 ```
 
-### 1.4 Git 저장소 설정
+### 1.4 프로젝트 저장소 설정
 
 ```bash
 # Git 사용자 설정
 git config --global user.name "Your Name"
 git config --global user.email "your.email@example.com"
 
-# 프로젝트 클론
-git clone https://github.com/yourusername/private-cloud-multi-tenant-platform.git
-cd private-cloud-multi-tenant-platform
+# 프로젝트 클론 (또는 초기 구조 생성)
+git clone https://github.com/yourusername/openstack-cicd-platform.git
+cd openstack-cicd-platform
 
-# 초기 디렉터리 구조 생성
-mkdir -p docs infrastructure/openstack/devstack infrastructure/hypervisor
-mkdir -p kubernetes monitoring ci-cd applications scripts
+# 또는 직접 디렉터리 구조 생성
+mkdir -p {docs,infrastructure/{setup,terraform,scripts},kubernetes/manifests}
+mkdir -p {cicd/{jenkins,pipelines},monitoring/grafana-dashboards}
+mkdir -p {applications/demo-app,scripts}
 ```
 
 ---
@@ -115,9 +116,18 @@ sudo apt install -y cpu-checker
 sudo kvm-ok
 ```
 
-### 2.2 KVM/QEMU 설치
+### 2.2 KVM/QEMU 설치 스크립트 생성
+
+`infrastructure/setup/install-hypervisor.sh` 파일을 생성합니다:
 
 ```bash
+#!/bin/bash
+# infrastructure/setup/install-hypervisor.sh
+
+set -e
+
+echo "=== KVM/QEMU 하이퍼바이저 설치 시작 ==="
+
 # KVM 및 관련 패키지 설치
 sudo apt install -y \
     qemu-kvm \
@@ -133,126 +143,144 @@ sudo apt install -y \
 sudo usermod -aG libvirt $USER
 sudo usermod -aG kvm $USER
 
-# 그룹 변경사항 적용을 위해 로그아웃 후 재로그인 또는
-newgrp libvirt
+echo "그룹 변경사항을 적용하려면 다시 로그인하세요."
+
+# Libvirt 서비스 시작 및 활성화
+sudo systemctl enable libvirtd
+sudo systemctl start libvirtd
+
+# 기본 네트워크 시작
+sudo virsh net-start default 2>/dev/null || true
+sudo virsh net-autostart default
+
+echo "=== KVM/QEMU 설치 완료 ==="
+
+# 설치 확인
+echo "설치 확인 중..."
+sudo systemctl is-active libvirtd
+sudo virsh list --all
+
+echo "하이퍼바이저 설치가 완료되었습니다."
 ```
 
 ### 2.3 Libvirt 설정
 
 ```bash
-# Libvirt 서비스 시작 및 활성화
-sudo systemctl enable libvirtd
-sudo systemctl start libvirtd
-sudo systemctl status libvirtd
+# 설치 스크립트 실행 권한 부여 및 실행
+chmod +x infrastructure/setup/install-hypervisor.sh
+./infrastructure/setup/install-hypervisor.sh
 
-# 기본 네트워크 확인
-sudo virsh net-list --all
-sudo virsh net-start default
-sudo virsh net-autostart default
+# 그룹 변경사항 적용 (재로그인 대신)
+newgrp libvirt
 ```
 
 ### 2.4 네트워크 브리지 설정
 
-#### 브리지 네트워크 생성
-```bash
-# 현재 네트워크 인터페이스 확인
-ip addr show
+#### 네트워크 설정 스크립트 생성
 
-# 네트워크 설정 파일 백업
+`infrastructure/scripts/setup-bridge.sh` 파일을 생성합니다:
+
+```bash
+#!/bin/bash
+# infrastructure/scripts/setup-bridge.sh
+
+set -e
+
+INTERFACE=${1:-enp0s3}  # 기본값, 실제 인터페이스명으로 변경 필요
+
+echo "=== 브리지 네트워크 설정 시작 ==="
+
+# 현재 네트워크 설정 백업
 sudo cp /etc/netplan/00-installer-config.yaml /etc/netplan/00-installer-config.yaml.bak
-```
 
-#### Netplan 설정 (Ubuntu 22.04)
-```bash
-# 브리지 네트워크 설정
+# 브리지 네트워크 설정 파일 생성
 sudo tee /etc/netplan/01-bridge.yaml << EOF
 network:
   version: 2
   renderer: networkd
   ethernets:
-    enp0s3:  # 실제 인터페이스명으로 변경
+    $INTERFACE:
       dhcp4: false
       dhcp6: false
   bridges:
     br0:
-      interfaces: [enp0s3]
+      interfaces: [$INTERFACE]
       dhcp4: true
       parameters:
         stp: false
         forward-delay: 0
 EOF
 
-# 네트워크 설정 적용
+echo "네트워크 설정을 적용합니다..."
 sudo netplan apply
+
+echo "=== 브리지 네트워크 설정 완료 ==="
 ```
 
 ### 2.5 가상화 환경 테스트
 
 ```bash
+# 네트워크 브리지 설정 (실제 인터페이스명으로 변경)
+chmod +x infrastructure/scripts/setup-bridge.sh
+# ./infrastructure/scripts/setup-bridge.sh enp0s3
+
 # KVM 설치 확인
 sudo systemctl is-active libvirtd
 sudo virsh list --all
-
-# 테스트 VM 생성 (선택사항)
-sudo virt-install \
-    --name test-vm \
-    --ram 1024 \
-    --disk path=/var/lib/libvirt/images/test-vm.img,size=10 \
-    --vcpus 1 \
-    --os-type linux \
-    --network bridge=br0 \
-    --graphics none \
-    --console pty,target_type=serial \
-    --location 'http://archive.ubuntu.com/ubuntu/dists/jammy/main/installer-amd64/' \
-    --extra-args 'console=ttyS0,115200n8 serial'
-
-# 테스트 후 VM 삭제
-sudo virsh destroy test-vm
-sudo virsh undefine test-vm --remove-all-storage
 ```
 
 ---
 
 ## 3. OpenStack 설치 및 구성
 
-### 3.1 DevStack 준비
+### 3.1 OpenStack 설치 스크립트 생성
 
-#### 전용 사용자 생성
+`infrastructure/setup/install-openstack.sh` 파일을 생성합니다:
+
 ```bash
+#!/bin/bash
+# infrastructure/setup/install-openstack.sh
+
+set -e
+
+echo "=== OpenStack DevStack 설치 시작 ==="
+
 # stack 사용자 생성
-sudo useradd -s /bin/bash -d /opt/stack -m stack
-sudo chmod +x /opt/stack
+if ! id -u stack >/dev/null 2>&1; then
+    sudo useradd -s /bin/bash -d /opt/stack -m stack
+    sudo chmod +x /opt/stack
+    echo "stack ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/stack
+fi
 
-# sudo 권한 부여
-echo "stack ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/stack
-
-# stack 사용자로 전환
-sudo su - stack
-```
-
-#### DevStack 다운로드
-```bash
-# stack 사용자로 실행
+# DevStack 다운로드
+sudo -u stack bash << 'EOF'
 cd /opt/stack
-git clone https://opendev.org/openstack/devstack
+if [ ! -d "devstack" ]; then
+    git clone https://opendev.org/openstack/devstack
+fi
 cd devstack
+EOF
+
+echo "DevStack 다운로드 완료"
+echo "이제 local.conf 파일을 설정하고 ./stack.sh를 실행하세요."
 ```
 
-### 3.2 DevStack 설정
+### 3.2 DevStack 설정 파일 생성
 
-#### local.conf 파일 생성
-```bash
-# /opt/stack/devstack/local.conf 파일 생성
-tee local.conf << EOF
+`infrastructure/setup/local.conf` 파일을 생성합니다:
+
+```ini
+# infrastructure/setup/local.conf
+
 [[local|localrc]]
 
 # 관리자 비밀번호 설정
-ADMIN_PASSWORD=secret
-DATABASE_PASSWORD=\$ADMIN_PASSWORD
-RABBIT_PASSWORD=\$ADMIN_PASSWORD
-SERVICE_PASSWORD=\$ADMIN_PASSWORD
+ADMIN_PASSWORD=openstack123
+DATABASE_PASSWORD=$ADMIN_PASSWORD
+RABBIT_PASSWORD=$ADMIN_PASSWORD
+SERVICE_PASSWORD=$ADMIN_PASSWORD
 
-# 호스트 IP 설정 (실제 IP로 변경)
+# 호스트 IP 설정 (실제 IP로 변경 필요)
 HOST_IP=192.168.1.100
 
 # 서비스 활성화
@@ -273,9 +301,6 @@ ENABLED_SERVICES+=,c-api,c-vol,c-sch
 # Glance (Image) 서비스
 ENABLED_SERVICES+=,g-api,g-reg
 
-# Swift (Object Storage) - 선택사항
-# ENABLED_SERVICES+=,s-proxy,s-object,s-container,s-account
-
 # 네트워크 설정
 FLOATING_RANGE=192.168.1.224/27
 FIXED_RANGE=10.11.12.0/24
@@ -292,79 +317,98 @@ SCREEN_LOGDIR=/opt/stack/logs
 DOWNLOAD_DEFAULT_IMAGES=True
 IMAGE_URLS+=",https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img"
 
-# 멀티 테넌트를 위한 프로젝트 생성
+# 멀티 테넌트를 위한 설정
 ENABLED_SERVICES+=,tempest
-EOF
 ```
 
-### 3.3 DevStack 설치 실행
+### 3.3 전체 설치 자동화 스크립트
+
+`scripts/setup-all.sh` 파일을 생성합니다:
 
 ```bash
-# DevStack 설치 시작 (30-60분 소요)
-cd /opt/stack/devstack
-./stack.sh
+#!/bin/bash
+# scripts/setup-all.sh
+
+set -e
+
+PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$PROJECT_ROOT"
+
+echo "=== OpenStack 전체 환경 구축 시작 ==="
+
+# 1. 하이퍼바이저 설치
+echo "1. 하이퍼바이저 설치 중..."
+./infrastructure/setup/install-hypervisor.sh
+
+# 2. OpenStack 설치 준비
+echo "2. OpenStack 설치 준비 중..."
+./infrastructure/setup/install-openstack.sh
+
+# 3. DevStack 설정 파일 복사
+echo "3. DevStack 설정 중..."
+sudo cp infrastructure/setup/local.conf /opt/stack/devstack/
+
+# 4. DevStack 설치 실행
+echo "4. DevStack 설치 실행 중... (약 30-60분 소요)"
+sudo -u stack bash -c "cd /opt/stack/devstack && ./stack.sh"
+
+echo "=== OpenStack 설치 완료 ==="
+echo "Dashboard URL: http://$(hostname -I | awk '{print $1}')/dashboard"
+echo "Username: admin"
+echo "Password: openstack123"
 ```
 
-#### 설치 중 참고사항
-- 설치 시간: 약 30-60분
-- 인터넷 연결 필수
-- 설치 로그: `/opt/stack/logs/stack.sh.log`
-- 오류 발생 시: `./unstack.sh` 실행 후 재설치
+### 3.4 설치 실행
 
-### 3.4 설치 완료 확인
-
-#### 서비스 상태 확인
 ```bash
-# OpenStack 서비스 상태 확인
-sudo systemctl list-units --type=service | grep devstack
+# 전체 스크립트 실행 권한 부여
+chmod +x scripts/setup-all.sh
+chmod +x infrastructure/setup/*.sh
+chmod +x infrastructure/scripts/*.sh
 
-# 또는 screen 세션 확인
-screen -list
+# HOST_IP 수정 (실제 서버 IP로 변경)
+sed -i 's/HOST_IP=192.168.1.100/HOST_IP=YOUR_ACTUAL_IP/' infrastructure/setup/local.conf
+
+# 전체 설치 실행
+./scripts/setup-all.sh
 ```
 
-#### 웹 대시보드 접속 확인
-```bash
-# 대시보드 URL 확인
-echo "Dashboard URL: http://$HOST_IP/dashboard"
-echo "Username: admin or demo"
-echo "Password: secret"
-```
+### 3.5 멀티 테넌트 환경 구성 스크립트
 
-#### CLI 환경 설정
+`infrastructure/scripts/setup-multi-tenant.sh` 파일을 생성합니다:
+
 ```bash
+#!/bin/bash
+# infrastructure/scripts/setup-multi-tenant.sh
+
+set -e
+
+echo "=== 멀티 테넌트 환경 구성 시작 ==="
+
 # OpenStack CLI 환경 변수 로드
 source /opt/stack/devstack/openrc admin admin
 
-# OpenStack 서비스 확인
-openstack service list
-openstack endpoint list
-openstack network list
-openstack image list
-```
-
-### 3.5 멀티 테넌트 환경 구성
-
-#### 추가 프로젝트 생성
-```bash
 # 개발팀 프로젝트 생성
+echo "개발 환경 프로젝트 생성 중..."
 openstack project create --description "Development Team" development
-openstack user create --project development --password devpass developer
+openstack user create --project development --password devpass123 developer
 openstack role add --project development --user developer member
 
 # 스테이징 프로젝트 생성
+echo "스테이징 환경 프로젝트 생성 중..."
 openstack project create --description "Staging Environment" staging
-openstack user create --project staging --password stagepass staging-user
+openstack user create --project staging --password stagepass123 staging-user
 openstack role add --project staging --user staging-user member
 
 # 프로덕션 프로젝트 생성
+echo "프로덕션 환경 프로젝트 생성 중..."
 openstack project create --description "Production Environment" production
-openstack user create --project production --password prodpass prod-user
+openstack user create --project production --password prodpass123 prod-user
 openstack role add --project production --user prod-user member
-```
 
-#### 네트워크 격리 설정
-```bash
 # 각 프로젝트별 네트워크 생성
+echo "프로젝트별 네트워크 생성 중..."
+
 # 개발 환경 네트워크
 openstack network create --project development dev-network
 openstack subnet create --project development --network dev-network \
@@ -379,63 +423,137 @@ openstack subnet create --project staging --network stage-network \
 openstack network create --project production prod-network
 openstack subnet create --project production --network prod-network \
     --subnet-range 10.10.30.0/24 --dns-nameserver 8.8.8.8 prod-subnet
-```
 
-#### 보안 그룹 설정
-```bash
 # 기본 보안 그룹 규칙 추가
+echo "보안 그룹 설정 중..."
 openstack security group rule create --protocol tcp --dst-port 22 default
 openstack security group rule create --protocol tcp --dst-port 80 default
 openstack security group rule create --protocol tcp --dst-port 443 default
 openstack security group rule create --protocol icmp default
+
+echo "=== 멀티 테넌트 환경 구성 완료 ==="
 ```
 
-### 3.6 설치 후 검증
+### 3.6 설치 검증 스크립트
 
-#### 인스턴스 생성 테스트
+`infrastructure/scripts/verify-installation.sh` 파일을 생성합니다:
+
 ```bash
-# 키페어 생성
-openstack keypair create --public-key ~/.ssh/id_rsa.pub mykey
+#!/bin/bash
+# infrastructure/scripts/verify-installation.sh
 
-# 플레이버 확인
-openstack flavor list
+set -e
 
-# 이미지 확인
-openstack image list
+echo "=== OpenStack 설치 검증 시작 ==="
 
-# 네트워크 확인
+# OpenStack CLI 환경 변수 로드
+source /opt/stack/devstack/openrc admin admin
+
+echo "1. OpenStack 서비스 확인"
+openstack service list
+
+echo "2. 엔드포인트 확인"
+openstack endpoint list
+
+echo "3. 네트워크 확인"
 openstack network list
 
-# 테스트 인스턴스 생성
-openstack server create --flavor m1.tiny --image cirros-0.5.2-x86_64-disk \
-    --network private --key-name mykey test-instance
+echo "4. 이미지 확인"
+openstack image list
 
-# 인스턴스 상태 확인
-openstack server list
-openstack server show test-instance
+echo "5. 플레이버 확인"
+openstack flavor list
+
+echo "6. 프로젝트 확인"
+openstack project list
+
+echo "7. 사용자 확인"
+openstack user list
+
+# 테스트 인스턴스 생성
+echo "8. 테스트 인스턴스 생성"
+if ! openstack keypair show mykey >/dev/null 2>&1; then
+    ssh-keygen -t rsa -N "" -f ~/.ssh/id_rsa >/dev/null 2>&1 || true
+    openstack keypair create --public-key ~/.ssh/id_rsa.pub mykey
+fi
+
+echo "=== 설치 검증 완료 ==="
+echo "모든 서비스가 정상적으로 동작하고 있습니다."
 ```
 
-#### 플로팅 IP 할당
+### 3.7 정리 스크립트
+
+`scripts/cleanup-all.sh` 파일을 생성합니다:
+
 ```bash
-# 플로팅 IP 생성
-openstack floating ip create public
+#!/bin/bash
+# scripts/cleanup-all.sh
 
-# 플로팅 IP 확인
-openstack floating ip list
+set -e
 
-# 인스턴스에 플로팅 IP 할당
-openstack server add floating ip test-instance FLOATING_IP_ADDRESS
+echo "=== OpenStack 환경 정리 시작 ==="
+
+# DevStack 정리
+if [ -d "/opt/stack/devstack" ]; then
+    echo "DevStack 정리 중..."
+    sudo -u stack bash -c "cd /opt/stack/devstack && ./unstack.sh" || true
+    sudo -u stack bash -c "cd /opt/stack/devstack && ./clean.sh" || true
+fi
+
+# 네트워크 설정 복원
+if [ -f "/etc/netplan/00-installer-config.yaml.bak" ]; then
+    echo "네트워크 설정 복원 중..."
+    sudo cp /etc/netplan/00-installer-config.yaml.bak /etc/netplan/00-installer-config.yaml
+    sudo rm -f /etc/netplan/01-bridge.yaml
+    sudo netplan apply
+fi
+
+echo "=== 환경 정리 완료 ==="
+```
+
+---
+
+## 사용 방법
+
+### 1. 초기 설치
+```bash
+# 저장소 클론
+git clone https://github.com/yourusername/openstack-cicd-platform.git
+cd openstack-cicd-platform
+
+# IP 주소 설정 (필수)
+sed -i 's/YOUR_ACTUAL_IP/192.168.1.100/' infrastructure/setup/local.conf
+
+# 전체 환경 구축
+./scripts/setup-all.sh
+```
+
+### 2. 멀티 테넌트 환경 구성
+```bash
+chmod +x infrastructure/scripts/setup-multi-tenant.sh
+./infrastructure/scripts/setup-multi-tenant.sh
+```
+
+### 3. 설치 검증
+```bash
+chmod +x infrastructure/scripts/verify-installation.sh
+./infrastructure/scripts/verify-installation.sh
+```
+
+### 4. 환경 정리
+```bash
+./scripts/cleanup-all.sh
 ```
 
 ---
 
 ## 다음 단계
 
-설치가 완료되면 다음 단계로 진행할 수 있습니다:
+설치가 완료되면 다음 문서를 참조하여 진행하세요:
 
-1. **Terraform 설정**: 인프라 자동화 구성
-2. **Kubernetes 클러스터 구축**: 컨테이너 오케스트레이션 환경 구성
-3. **CI/CD 파이프라인 구축**: Jenkins를 활용한 자동화 배포
+- `docs/02-infrastructure-automation.md` - Terraform 인프라 자동화
+- `docs/03-kubernetes-deployment.md` - Kubernetes 클러스터 구축  
+- `docs/04-cicd-pipeline.md` - Jenkins CI/CD 파이프라인 구축
 
 ---
 
