@@ -1,254 +1,257 @@
-# OpenStack 기반 멀티 테넌트 <br> CI/CD 및 Kubernetes 개발 플랫폼 구축
+# OpenStack 기반 Private Cloud 운영 자동화 시스템
 
 ## 프로젝트 개요
 
-본 프로젝트는 OpenStack을 기반으로 한 완전 자동화된 멀티 테넌트 CI/CD 파이프라인과 Kubernetes 개발 플랫폼을 구축하는 것을 목표로 합니다. 하이퍼바이저부터 컨테이너 오케스트레이션까지 전체 클라우드 스택을 다루어 실제 엔터프라이즈 환경과 유사한 인프라를 구현합니다.
-
-## 기술 스택
-
-### 가상화 및 인프라
-- **하이퍼바이저**: KVM/QEMU
-- **클라우드 플랫폼**: OpenStack (DevStack)
-- **인프라 관리**: Terraform
-
-### 컨테이너 및 오케스트레이션
-- **컨테이너 런타임**: Docker
-- **오케스트레이션**: Kubernetes
-- **서비스 메시**: Istio (선택사항)
-
-### CI/CD 및 자동화
-- **CI/CD 도구**: Jenkins
-- **버전 관리**: Git
-- **자동화 스크립트**: Ansible (선택사항)
-
-### 모니터링 및 로깅
-- **메트릭 수집**: Prometheus
-- **시각화**: Grafana
-- **로그 관리**: ELK Stack (Elasticsearch, Logstash, Kibana)
-
-### 보안 및 네트워킹
-- **시크릿 관리**: HashiCorp Vault
-- **네트워크 정책**: Kubernetes Network Policies
-- **접근 제어**: RBAC (Role-Based Access Control)
+OpenStack 환경에서 GitLab CI/CD, Terraform, Ansible을 활용한 완전 자동화된 인프라 운영 시스템을 구축합니다. 가상 인프라 프로비저닝부터 애플리케이션 배포, 실시간 모니터링, 장애 대응까지 전체 DevOps 라이프사이클을 다룹니다.
 
 ## 프로젝트 목표
 
-### 주요 목표
-1. 완전 자동화된 인프라 프로비저닝 구현
-2. 멀티 테넌트 환경에서의 격리된 개발 환경 제공
-3. 지속적 통합 및 배포 파이프라인 구축
-4. 실시간 모니터링 및 알림 시스템 구현
-5. 확장 가능하고 안정적인 컨테이너 플랫폼 구축
+- OpenStack 기반 가상 인프라 구축 및 관리
+- GitLab CI/CD 파이프라인 구성으로 자동화된 배포 환경 구축
+- Infrastructure as Code 실현 (Terraform + Ansible)
+- 실시간 모니터링 시스템 구성 및 장애 대응 자동화
+- 실무 수준의 운영 문서 작성 및 표준화
 
-### 학습 목표
-- OpenStack 클라우드 플랫폼 운영 및 관리
-- 하이퍼바이저 기반 가상화 기술 이해
-- Kubernetes 클러스터 구축 및 운영
-- CI/CD 파이프라인 설계 및 구현
-- 클라우드 네이티브 애플리케이션 배포 및 관리
+## 기술 스택
 
-## 시스템 요구사항
+### 인프라
+- **가상화**: KVM/QEMU
+- **클라우드 플랫폼**: OpenStack (DevStack)
+- **운영체제**: Ubuntu 22.04 LTS
 
-### 하드웨어 요구사항
+### 자동화 도구
+- **인프라 관리**: Terraform
+- **구성 관리**: Ansible
+- **CI/CD**: GitLab CI/CD
+- **버전 관리**: Git + GitLab
 
-#### OpenStack 서버 (데스크톱 권장)
-- **CPU**: 8코어 이상 (가상화 지원 필수)
-- **메모리**: 32GB RAM 이상
-- **스토리지**: 
-  - **SSD**: 200GB 이상 (OS + OpenStack)
-  - **HDD**: 500GB 이상 (VM 이미지 + 데이터)
-- **네트워크**: 기가비트 이더넷
+### 모니터링
+- **메트릭 수집**: Prometheus
+- **대시보드**: Grafana
+- **알림**: Alertmanager
 
-#### 개발 환경 (Windows 노트북)
-- **OS**: Windows 10/11
-- **메모리**: 8GB RAM 이상
-- **스토리지**: 100GB 이상
-- **소프트웨어**: VSCode + Remote SSH 확장
+## 구현 단계
 
-### 소프트웨어 요구사항
-- **OpenStack 서버**: Ubuntu 22.04 LTS
-- **개발 환경**: Windows 10/11 + VSCode
-- **네트워크**: SSH 접속 가능한 환경
+### Phase 1: 기반 환경 구성
+- Ubuntu 서버에 KVM 하이퍼바이저 설치
+- DevStack으로 OpenStack 올인원 환경 구성
+- 기본 프로젝트, 사용자, 네트워크 설정
 
-### 저장공간 최적화 구성
-- **SSD**: Ubuntu OS + OpenStack 설치 (빠른 실행)
-- **HDD**: VM 이미지 + 프로젝트 데이터 저장 (대용량)
-- **파티션 설정**: VM 저장소를 HDD로 마운트 권장
+### Phase 2: 인프라 자동화
+- Terraform으로 VM 인스턴스 생성 자동화
+- 네트워크 구성, 보안 그룹, 스토리지 볼륨 관리
+- 상태 파일 기반 인프라 버전 관리
 
-### VM 네트워크 설정
-- **어댑터 1**: NAT (인터넷 접속용)
-- **어댑터 2**: 브리지 (외부 기기에서 SSH 접속용)
-- **목적**: 노트북에서 데스크톱 Ubuntu로 SSH 접속 + 인터넷 사용
+### Phase 3: 서비스 구성 자동화
+- Ansible 플레이북으로 애플리케이션 설치 자동화
+- nginx, Jenkins 등 서비스 초기 설정
+- 사용자 계정, 방화벽 등 보안 설정
 
-## 개발 환경 구성
+### Phase 4: CI/CD 파이프라인 구축
+- GitLab 저장소 생성 및 Runner 설정
+- .gitlab-ci.yml 파이프라인 작성
+- Terraform → VM 자동 배포
+- Ansible → 서비스 자동 구성
 
-### 권장 구성 (분산 환경)
-```
-[데스크톱] - OpenStack 서버
-├── Ubuntu 22.04 LTS
-├── KVM 하이퍼바이저
-├── OpenStack 플랫폼
-└── Kubernetes VM들
+### Phase 5: 모니터링 시스템 구성
+- Prometheus 메트릭 수집 서버 구축
+- Grafana 대시보드 구성
+- Slack, Email 기반 알림 시스템 연동
 
-[노트북] - Windows 개발 환경
-├── Windows 10/11
-├── VSCode + Remote SSH
-├── Git for Windows
-└── SSH 클라이언트
-```
-
-### 연결 구조
-```
-Windows 노트북 (VSCode) → SSH → 데스크톱 Ubuntu → Terraform → OpenStack VMs
-```
-
-### 개발 워크플로우
-1. **Windows 노트북**에서 VSCode로 코드 작성
-2. **Remote SSH**로 데스크톱 Ubuntu에 접속
-3. **Ubuntu 터미널**에서 Terraform 명령어 실행
-4. **OpenStack**에서 자동으로 VM 생성 및 관리
-
-### 장점
-- **익숙한 환경**: Windows VSCode 그대로 사용
-- **성능 최적화**: 고사양 데스크톱으로 서버 운영
-- **원격 개발**: SSH로 언제 어디서나 접속 가능
-- **리소스 효율성**: 각 장비의 최적 활용
+### Phase 6: 장애 대응 및 문서화
+- 장애 시나리오 설계 및 테스트
+- 자동 복구 메커니즘 구현
+- 운영 매뉴얼 및 장애 대응 가이드 작성
 
 ## 프로젝트 구조
 
 ```
-openstack-cicd-platform/
-├── README.md                          # 프로젝트 개요
-├── docs/                             # 문서
-│   ├── 01-environment-setup.md       # 환경 준비 및 OpenStack 설치
-│   ├── 02-infrastructure-automation.md # Terraform 인프라 자동화
-│   ├── 03-kubernetes-deployment.md    # Kubernetes 클러스터 구축
-│   ├── 04-cicd-pipeline.md           # Jenkins CI/CD 구축
-│   ├── 05-monitoring-setup.md        # 모니터링 시스템 구축
-│   └── troubleshooting.md            # 문제 해결
-│
-├── infrastructure/                   # 인프라 코드
-│   ├── setup/                        # 초기 환경 설정
-│   │   ├── install-hypervisor.sh     # KVM/QEMU 설치
-│   │   ├── install-openstack.sh      # OpenStack 설치
-│   │   └── local.conf                # DevStack 설정
-│   ├── terraform/                    # Terraform 관리
-│   │   ├── main.tf                   # 메인 설정
-│   │   ├── variables.tf              # 변수 정의
-│   │   └── outputs.tf                # 출력 정의
-│   └── scripts/                      # 유틸리티 스크립트
-│       ├── deploy-infra.sh           # 인프라 배포
-│       └── cleanup-infra.sh          # 인프라 정리
-│
-├── kubernetes/                       # Kubernetes 설정
-│   ├── setup-cluster.sh              # 클러스터 구축
-│   ├── cluster-config.yaml           # 클러스터 설정
-│   └── manifests/                    # K8s 리소스
-│       ├── namespaces.yaml           # 네임스페이스
-│       ├── rbac.yaml                 # 권한 설정
-│       └── storage.yaml              # 스토리지 설정
-│
-├── cicd/                            # CI/CD 파이프라인
-│   ├── jenkins/                     # Jenkins 설정
-│   │   ├── deploy-jenkins.sh         # Jenkins 설치
-│   │   ├── jenkins-config.yaml       # Jenkins 설정
-│   │   └── Dockerfile                # 커스텀 이미지
-│   └── pipelines/                   # 파이프라인 정의
-│       └── Jenkinsfile               # 파이프라인 코드
-│
-├── monitoring/                      # 모니터링 시스템
-│   ├── deploy-monitoring.sh          # 모니터링 설치
-│   ├── prometheus.yaml               # Prometheus 설정
-│   └── grafana-dashboards/           # Grafana 대시보드
-│
-├── applications/                    # 샘플 애플리케이션
-│   └── demo-app/                    # 테스트 앱
-│       ├── app.py                    # 애플리케이션 코드
-│       ├── Dockerfile                # 컨테이너 이미지
-│       └── k8s-deploy.yaml           # K8s 배포 매니페스트
-│
-├── scripts/                         # 자동화 스크립트
-│   ├── setup-all.sh                 # 전체 환경 구축
-│   ├── deploy-app.sh                 # 애플리케이션 배포
-│   └── cleanup-all.sh                # 전체 환경 정리
-│
-├── .gitignore                       # Git 제외 파일
-├── Jenkinsfile                      # 루트 파이프라인
-├── docker-compose.yml               # 로컬 개발 환경
-└── Makefile                         # 빌드 명령어
+openstack-automation/
+├── terraform/
+│   ├── main.tf
+│   ├── variables.tf
+│   └── outputs.tf
+├── ansible/
+│   ├── playbooks/
+│   ├── roles/
+│   └── inventory/
+├── gitlab-ci/
+│   ├── .gitlab-ci.yml
+│   └── runners/
+├── monitoring/
+│   ├── prometheus/
+│   ├── grafana/
+│   └── alertmanager/
+├── scripts/
+│   ├── setup-devstack.sh          # OpenStack 초기 설치
+│   ├── backup-system.sh           # 시스템 백업 자동화
+│   ├── health-check.sh            # 서비스 상태 점검
+│   └── automation/
+│       ├── vm-provisioning.sh     # VM 대량 생성 스크립트
+│       └── service-restart.sh     # 서비스 재시작 자동화
+├── docs/
+│   ├── architecture/
+│   │   ├── system-overview.md     # 전체 시스템 구성도
+│   │   └── network-diagram.png    # 네트워크 토폴로지
+│   ├── operations/
+│   │   ├── daily-checklist.md     # 일일 운영 체크리스트
+│   │   └── backup-procedures.md   # 백업 및 복구 절차
+│   └── troubleshooting/
+│       ├── common-issues.md       # 자주 발생하는 문제들
+│       └── performance-tuning.md  # 성능 최적화 가이드
+└── README.md
 ```
 
-## 구현 단계
+## 학습 목표
 
-### Phase 1: 기반 인프라 구축
-- 하이퍼바이저 설치 및 설정
-- OpenStack DevStack 환경 구축
-- 네트워크 및 스토리지 설정
-- Terraform을 통한 인프라 코드화
+### 기술적 역량
+- OpenStack 클라우드 플랫폼 운영 능력
+- Infrastructure as Code 설계 및 구현
+- CI/CD 파이프라인 구성 및 최적화
+- 클라우드 네이티브 서비스 관리
 
-### Phase 2: 컨테이너 플랫폼 구축
-- Docker 환경 설정
-- Kubernetes 클러스터 구축
-- 멀티 테넌트를 위한 네임스페이스 구성
-- 스토리지 클래스 및 PV/PVC 설정
+### 운영 역량
+- 시스템 모니터링 및 성능 최적화
+- 장애 감지, 분석, 대응 프로세스
+- 자동화 스크립트 작성 및 유지보수
+- 기술 문서 작성 및 표준화
 
-### Phase 3: CI/CD 파이프라인 구현
-- Jenkins 마스터/슬레이브 구성
-- Git 저장소 연동
-- 자동 빌드 및 테스트 파이프라인 구축
-- 컨테이너 이미지 빌드 및 배포 자동화
+## 시스템 요구사항
 
-### Phase 4: 모니터링 및 로깅 시스템
-- Prometheus 메트릭 수집 설정
-- Grafana 대시보드 구성
-- ELK 스택을 통한 중앙화된 로깅
-- 알림 및 장애 대응 시스템 구축
+### 하드웨어 (테스트 환경 기준)
+- CPU: Intel i5-8400 또는 AMD Ryzen 5 3600 이상
+- RAM: 16GB (DevStack 8GB + 모니터링 4GB + 여유분 4GB)
+- 스토리지: SSD 120GB 이상 (OS 40GB + OpenStack 80GB)
+- 네트워크: 유선 인터넷 연결 권장 (패키지 다운로드 대용량)
 
-### Phase 5: 보안 및 운영 최적화
-- RBAC 기반 접근 제어 구현
-- 네트워크 보안 정책 적용
-- 백업 및 재해 복구 절차 수립
-- 성능 최적화 및 튜닝
+### 소프트웨어
+- Ubuntu 22.04 LTS
+- Docker 및 Docker Compose
+- Git 2.30 이상
+- Python 3.8 이상
 
-## 예상 결과물
+## 시작하기
 
-### 기술적 성과
-- 완전 자동화된 클라우드 인프라
-- 확장 가능한 컨테이너 플랫폼
-- 지속적 통합/배포 환경
-- 실시간 모니터링 시스템
+### 1. 저장소 클론
+```bash
+git clone <repository-url>
+cd openstack-automation
+```
 
-### 비즈니스 가치
-- 개발 생산성 향상
-- 인프라 운영 비용 절감
-- 장애 대응 시간 단축
-- 확장성 및 안정성 확보
+### 2. 기본 환경 설정
+```bash
+# 필수 패키지 설치
+sudo apt update
+sudo apt install -y git curl wget
 
-## 프로젝트 일정
+# Docker 설치
+curl -fsSL https://get.docker.com -o get-docker.sh
+sh get-docker.sh
+```
 
-- **Phase 1**: 3주 (인프라 기반 구축)
-- **Phase 2**: 2주 (컨테이너 플랫폼)
-- **Phase 3**: 3주 (CI/CD 파이프라인)
-- **Phase 4**: 3주 (모니터링/로깅)
-- **Phase 5**: 1주 (보안 및 최적화)
+### 3. OpenStack 환경 구성
+```bash
+cd scripts
+# DevStack 설치 및 기본 설정 (약 30-60분 소요)
+./setup-devstack.sh
 
-**총 예상 기간**: 12주 (약 3개월)
+# 설치 완료 후 환경 변수 로드
+source /opt/stack/devstack/openrc admin admin
+```
+
+> **setup-devstack.sh 주요 내용**
+> - DevStack 저장소 클론 및 의존성 설치
+> - local.conf 파일 생성 (패스워드, 서비스 설정)
+> - OpenStack 서비스 설치 및 시작
+> - 기본 네트워크, 이미지, 플레이버 생성
+
+## 주요 명령어
+
+### Terraform
+```bash
+# 인프라 계획 확인
+terraform plan -var-file="environments/dev.tfvars"
+
+# 인프라 배포
+terraform apply -auto-approve
+
+# 특정 리소스만 재배포
+terraform apply -target=openstack_compute_instance_v2.web_server
+
+# 인프라 제거
+terraform destroy
+```
+
+### Ansible
+```bash
+# 전체 플레이북 실행
+ansible-playbook -i inventory/hosts playbooks/site.yml
+
+# 특정 서비스만 설치
+ansible-playbook -i inventory/hosts playbooks/site.yml --tags "nginx"
+
+# Dry-run 모드 (실제 변경 없이 확인)
+ansible-playbook -i inventory/hosts playbooks/site.yml --check
+```
+
+### OpenStack CLI
+```bash
+# VM 목록 확인
+openstack server list
+
+# 네트워크 상태 확인
+openstack network list
+
+# 이미지 목록
+openstack image list
+```
+
+## 모니터링 대시보드
+
+- Grafana: http://localhost:3000 (admin/admin)
+- Prometheus: http://localhost:9090
+- OpenStack Horizon: http://localhost/dashboard (admin/stack)
+
+### 알림 설정 예시
+```bash
+# Slack 알림 테스트
+curl -X POST -H 'Content-type: application/json' \
+--data '{"text":"OpenStack 시스템 알림 테스트"}' \
+YOUR_SLACK_WEBHOOK_URL
+
+# 이메일 알림 설정 (Alertmanager)
+# monitoring/alertmanager/alertmanager.yml 파일 참조
+```
+
+## 문제 해결
+
+일반적인 문제와 해결 방법은 [docs/troubleshooting](docs/troubleshooting/) 디렉터리를 참조하세요.
+
+### 자주 발생하는 문제
+- DevStack 설치 실패: 메모리 부족 확인
+- Terraform 상태 충돌: 상태 파일 백업 후 복구
+- Ansible 연결 오류: SSH 키 설정 확인
 
 ## 참고 자료
 
 ### 공식 문서
-- OpenStack Documentation
-- Kubernetes Documentation
-- Jenkins Documentation
-- Terraform Documentation
+- [OpenStack Documentation](https://docs.openstack.org/)
+- [Terraform OpenStack Provider](https://registry.terraform.io/providers/terraform-provider-openstack/openstack/latest/docs)
+- [Ansible OpenStack Collection](https://docs.ansible.com/ansible/latest/collections/openstack/cloud/)
 
-### 학습 리소스
-- OpenStack 설치 가이드
-- Kubernetes 클러스터 구축 튜토리얼
-- CI/CD 파이프라인 베스트 프랙티스
-- 클라우드 네이티브 모니터링 가이드
+### 학습 자료
+- OpenStack 기초 개념 및 구성 요소
+- Terraform 상태 관리 및 모듈 설계
+- Ansible 역할 기반 플레이북 작성
+- GitLab CI/CD 파이프라인 최적화
 
-## 라이선스
+## 기여하기
 
-이 프로젝트는 MIT 라이선스 하에 배포됩니다.
+1. 이슈 생성으로 문제 리포트 또는 개선 제안
+2. 기능 브랜치 생성 후 작업
+3. 코드 리뷰를 통한 품질 관리
+4. 문서 업데이트 및 테스트 케이스 추가
 
+## 라이센스
+
+이 프로젝트는 MIT 라이센스 하에 배포됩니다. 자세한 내용은 LICENSE 파일을 확인하세요.
