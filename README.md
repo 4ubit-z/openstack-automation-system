@@ -119,7 +119,7 @@ openstack-automation/
 ## 시스템 요구사항
 
 ### 하드웨어 (본인[가상환경] 기준)
-- CPU: 4 / 2 
+- CPU: 총 8개의 가상 코어(vCPU)
 - RAM: 16GB (DevStack 8GB + 모니터링 4GB + 여유분 4GB)
 - 스토리지: SSD 120GB 이상 (OS 40GB + OpenStack 80GB)
 - 네트워크: 유선 인터넷 연결 권장 (패키지 다운로드 대용량)
