@@ -17,7 +17,7 @@ OpenStack 환경에서 GitLab CI/CD, Terraform, Ansible을 활용한 완전 자�
 ### 인프라
 - **가상화**: KVM/QEMU
 - **클라우드 플랫폼**: OpenStack (DevStack)
-- **운영체제**: Ubuntu 22.04 LTS
+- **운영체제**: Ubuntu 22.04.5 LTS
 
 ### 자동화 도구
 - **인프라 관리**: Terraform
@@ -126,7 +126,7 @@ openstack-automation/
 
 ### 소프트웨어
 - VMware Workstation Pro
-- Ubuntu 22.04.05 LTS
+- Ubuntu 22.04.5 LTS
 - Git 2.30 이상
 - Python 3.8 이상
 
