@@ -33,9 +33,8 @@ OpenStack 환경에서 GitLab CI/CD, Terraform, Ansible을 활용한 완전 자�
 ## 구현 단계
 
 ### Phase 1: 기반 환경 구성
-- Ubuntu 서버에 KVM 하이퍼바이저 설치
-- DevStack으로 OpenStack 올인원 환경 구성
-- 기본 프로젝트, 사용자, 네트워크 설정
+- Ubuntu 서버에서 DevStack 환경 구성
+- 사용자, 네트워크 설정
 
 ### Phase 2: 인프라 자동화
 - Terraform으로 VM 인스턴스 생성 자동화
