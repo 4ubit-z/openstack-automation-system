@@ -1,0 +1,117 @@
+# Nginx 설치 자동화 가이드 (with Ansible)
+
+Ansible을 사용하여 OpenStack 인스턴스에 Nginx를 자동으로 설치하고 관리
+
+## 목적
+
+OpenStack 인스턴스(웹서버 역할)에 Nginx를 자동으로 설치하고 구동 상태를 보장함. **핵심 목표는 "Nginx가 항상 설치되고 실행 중이어야 한다"는 상태를 코드로 관리**하는 것
+
+## 자동화의 장점
+
+| 이유 | 설명 |
+|------|------|
+| 재현성 보장 | 어떤 환경에서도 동일한 설정을 반복 없이 자동 적용할 수 있음 |
+| 멱등성 유지 | 이미 설치되어 있으면 그대로 유지, 없으면 설치함 (`changed` or `ok`) |
+| CI/CD 기반 구축 준비 | 이후 Jenkins 등과 연계하여 배포 파이프라인 구성 가능 |
+| 운영 메뉴얼 대체 | 수동 작업 문서 없이 플레이북이 곧 설치/운영 문서 |
+| 서버 초기화 대응 | 서버를 날려도 플레이북 한 번이면 복구 완료 |
+
+## 작업 디렉터리 이동
+
+```bash
+cd ~/ansible-test
+```
+
+## nginx-install.yml 플레이북 작성
+
+```bash
+touch nginx-install.yml
+```
+
+**nginx-install.yml 파일 내용**:
+
+```yaml
+---
+- name: Install and start Nginx on web server
+  hosts: web
+  become: yes
+  
+  tasks:
+    - name: Update apt package cache
+      apt:
+        update_cache: yes
+        
+    - name: Upgrade all packages
+      apt:
+        upgrade: yes
+        
+    - name: Install Nginx
+      apt:
+        name: nginx
+        state: present
+        
+    - name: Ensure Nginx is running
+      service:
+        name: nginx
+        state: started
+        enabled: yes
+```
+
+## 실행 방법
+
+```bash
+ansible-playbook -i inventory.ini nginx-install.yml
+```
+
+## 실행 결과 해석
+
+**성공적인 실행 결과 예시**:
+
+```
+TASK [Install Nginx] 
+ok: [a.b.c.d]
+
+TASK [Ensure Nginx is running]
+changed: [a.b.c.d]
+```
+
+**결과 상태 설명**:
+- `ok`: 이미 설치되어 있어 상태 유지
+- `changed`: 해당 작업으로 인해 상태가 변경됨 (예: 서비스 시작됨)
+- 오류가 없으면 성공
+
+## 접속 테스트
+
+웹 브라우저에서 다음 주소로 접속:
+
+```
+http://<floating_ip>
+```
+
+Nginx 기본 웹페이지가 열리면 성공
+
+## 문제 해결
+
+### 플레이북 실행 오류
+
+```bash
+# 상세 로그로 디버깅
+ansible-playbook -i inventory.ini nginx-install.yml -vvv
+
+# 특정 태스크만 실행
+ansible-playbook -i inventory.ini nginx-install.yml --tags "nginx"
+```
+
+### 웹 접속 실패
+
+```bash
+# 대상 서버에서 Nginx 상태 확인
+ansible -i inventory.ini web -m shell -a "sudo systemctl status nginx"
+
+# 방화벽 확인
+ansible -i inventory.ini web -m shell -a "sudo ufw status"
+```
+
+---
+
+**참고**: 이 자동화 과정을 통해 인프라 구성의 일관성과 재현성을 확보할 수 있으며, 향후 더 복잡한 서비스 배포 자동화의 기반이 됨
