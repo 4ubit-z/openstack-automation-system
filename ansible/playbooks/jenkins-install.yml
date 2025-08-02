@@ -1,0 +1,39 @@
+---
+- name: Install Java 17 and Jenkins
+  hosts: web
+  become: yes
+  tasks:
+    # Jenkins 최신 버전은 최소 Java 17 이상 필요 (Java 11 실행 불가)
+    - name: Install Java 17
+      apt:
+        name: openjdk-17-jdk
+        state: present
+        update_cache: yes
+        
+    # Jenkins 설치를 위한 공식 GPG 키 등록
+    - name: Add Jenkins GPG key
+      ansible.builtin.apt_key:
+        url: https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
+        keyring: /usr/share/keyrings/jenkins-keyring.asc
+        state: present
+        
+    # Jenkins 저장소 추가 (서명키 연동)
+    - name: Add Jenkins repository
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/"
+        filename: jenkins
+        state: present
+        
+    # Jenkins 패키지 설치
+    - name: Install Jenkins
+      apt:
+        name: jenkins
+        state: present
+        update_cache: yes
+        
+    # Jenkins 서비스 시작 및 부팅 시 자동 실행 설정
+    - name: Start and enable Jenkins
+      service:
+        name: jenkins
+        state: started
+        enabled: yes
