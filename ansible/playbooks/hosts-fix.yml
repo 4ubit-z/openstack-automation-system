@@ -1,0 +1,12 @@
+- name: Fix /etc/hosts to match hostname
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Add hostname to 127.0.0.1 line if not present
+      lineinfile:
+        path: /etc/hosts
+        regexp: '^127\.0\.0\.1'
+        line: '127.0.0.1   localhost tf-instance'
+        state: present
+        backup: yes
