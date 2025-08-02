@@ -44,7 +44,6 @@ OpenStack 환경에서 GitLab CI/CD, Terraform, Ansible을 활용한 완전 자�
 ### Phase 3: 서비스 구성 자동화
 - Ansible 플레이북으로 애플리케이션 설치 자동화
 - nginx, Jenkins 등 서비스 초기 설정
-- 사용자 계정, 방화벽 등 보안 설정
 
 ### Phase 4: CI/CD 파이프라인 구축
 - GitLab 저장소 생성 및 Runner 설정
