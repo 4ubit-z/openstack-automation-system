@@ -1,0 +1,8 @@
+test:
+  stage: test
+  tags:
+    - shell  # Runner 등록 시 사용한 태그와 동일해야 함
+  script:
+    - echo "Runner 테스트"
+    - whoami
+    - pwd
