@@ -1,0 +1,95 @@
+stages:
+  - init
+  - plan
+  - apply
+
+# 공통 설정
+.default_template:
+  image: ""              # Shell Executor라서 미사용
+  before_script:
+    # 1) Terraform 설치 확인 (있다면 스킵)
+    - |
+      if ! command -v terraform >/dev/null 2>&1; then
+        echo "[INFO] Installing Terraform..."
+        sudo apt-get update -y
+        sudo apt-get install -y wget unzip
+        TF_VERSION="1.6.6"
+        wget -q https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip
+        unzip -o terraform_${TF_VERSION}_linux_amd64.zip
+        sudo mv terraform /usr/local/bin/terraform
+        terraform -version
+      else
+        echo "[INFO] Terraform already installed:"
+        terraform -version
+      fi
+    # 2) OpenStack 인증 파일 생성
+    - mkdir -p ~/.config/openstack
+    - echo "$OPENSTACK_CLOUDS_YAML" > ~/.config/openstack/clouds.yaml
+    - chmod 600 ~/.config/openstack/clouds.yaml
+    # 3) 작업 디렉터리 이동
+    - cd terraform
+  after_script:
+    # 민감 파일 정리
+    - shred -u ~/.config/openstack/clouds.yaml || true
+
+# 캐시 (플러그인/모듈)
+.cache_template:
+  cache:
+    key: "terraform-cache"
+    paths:
+      - terraform/.terraform/
+    policy: pull-push
+
+init:
+  stage: init
+  extends:
+    - .default_template
+    - .cache_template
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  script:
+    - terraform init -input=false
+  artifacts:
+    paths:
+      - terraform/.terraform/
+    expire_in: 2h
+
+plan:
+  stage: plan
+  extends:
+    - .default_template
+    - .cache_template
+  needs: ["init"]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+      when: on_success
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: on_success
+  script:
+    - terraform fmt -check
+    - terraform validate
+    - terraform plan -input=false -out=tfplan
+  artifacts:
+    name: "tfplan-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - terraform/tfplan
+      - terraform/.terraform/
+    expire_in: 1 day
+  allow_failure: false
+
+apply:
+  stage: apply
+  extends:
+    - .default_template
+    - .cache_template
+  needs: ["plan"]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual         # 수동 승인
+      allow_failure: false
+    - when: never          # 기타 브랜치 차단
+  script:
+    - ls -l
+    - terraform show tfplan || true
+    - terraform apply -input=false -auto-approve tfplan
