@@ -1,0 +1,49 @@
+stages:
+  - ansible-check
+  - ansible-apply
+
+.default_ansible:
+  image: ""  # Shell Executor 환경
+  before_script:
+    # 1) Ansible 설치
+    - |
+      if ! command -v ansible >/dev/null 2>&1; then
+        echo "[INFO] Installing Ansible..."
+        sudo apt-get update -y
+        sudo apt-get install -y ansible sshpass
+      else
+        echo "[INFO] Ansible already installed:"
+        ansible --version
+      fi
+    # 2) SSH 키 생성
+    - mkdir -p ~/.ssh
+    - echo "$ANSIBLE_PRIVATE_KEY" > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    # 3) Inventory 파일 생성
+    - mkdir -p ansible/inventories
+    - echo "$ANSIBLE_INVENTORY" > ansible/inventories/hosts.ini
+    # 4) Known hosts 무시 설정 (테스트 환경)
+    - echo -e "Host *\n\tStrictHostKeyChecking no\n" > ~/.ssh/config
+  after_script:
+    # 민감 파일 제거
+    - shred -u ~/.ssh/id_rsa || true
+    - shred -u ansible/inventories/hosts.ini || true
+
+ansible-check:
+  stage: ansible-check
+  extends: .default_ansible
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+  script:
+    - cd ansible
+    - ansible-playbook -i inventories/hosts.ini site.yml --check
+
+ansible-apply:
+  stage: ansible-apply
+  extends: .default_ansible
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+  script:
+    - cd ansible
+    - ansible-playbook -i inventories/hosts.ini site.yml
