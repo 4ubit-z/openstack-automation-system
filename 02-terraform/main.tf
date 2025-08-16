@@ -86,12 +86,12 @@ resource "openstack_compute_instance_v2" "vm_1" {
   key_pair    = var.key_name
 
   block_device {
-    uuid                  = var.image_id
-    source_type           = "image"
-    destination_type      = "volume"
-    volume_size           = var.volume_size
+    uuid                = var.image_id
+    source_type         = "image"
+    destination_type    = "volume"
+    volume_size         = var.volume_size
     delete_on_termination = true
-    boot_index            = 0
+    boot_index          = 0
   }
 
   network {
