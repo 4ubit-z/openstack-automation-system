@@ -21,7 +21,7 @@ variable "key_name" {
 
 variable "volume_size" {
   description = "루트 볼륨 크기 (GiB)"
-  default     = 60
+  default     = 80
 }
 
 # 네트워크 관련
