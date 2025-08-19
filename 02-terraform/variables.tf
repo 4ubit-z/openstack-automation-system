@@ -6,7 +6,7 @@ variable "instance_name" {
 
 variable "image_id" {
   description = "이미지 UUID"
-  default     = "f033a485-cc1a-4e6d-a8c8-da6c7a059528"
+  default     = "d714507c-3a35-4020-ac27-c58fa93ac4f3"
 }
 
 variable "flavor_name" {
@@ -21,7 +21,7 @@ variable "key_name" {
 
 variable "volume_size" {
   description = "루트 볼륨 크기 (GiB)"
-  default     = 20
+  default     = 60
 }
 
 # 네트워크 관련
