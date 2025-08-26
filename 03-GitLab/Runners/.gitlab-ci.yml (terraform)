@@ -1,95 +1,117 @@
-stages:
-  - init
-  - plan
-  - apply
+stages: [plan, apply, config, destroy]
 
-# 공통 설정
-.default_template:
-  image: ""              # Shell Executor라서 미사용
-  before_script:
-    # 1) Terraform 설치 확인 (있다면 스킵)
-    - |
-      if ! command -v terraform >/dev/null 2>&1; then
-        echo "[INFO] Installing Terraform..."
-        sudo apt-get update -y
-        sudo apt-get install -y wget unzip
-        TF_VERSION="1.6.6"
-        wget -q https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip
-        unzip -o terraform_${TF_VERSION}_linux_amd64.zip
-        sudo mv terraform /usr/local/bin/terraform
-        terraform -version
-      else
-        echo "[INFO] Terraform already installed:"
-        terraform -version
-      fi
-    # 2) OpenStack 인증 파일 생성
-    - mkdir -p ~/.config/openstack
-    - echo "$OPENSTACK_CLOUDS_YAML" > ~/.config/openstack/clouds.yaml
-    - chmod 600 ~/.config/openstack/clouds.yaml
-    # 3) 작업 디렉터리 이동
-    - cd terraform
-  after_script:
-    # 민감 파일 정리
-    - shred -u ~/.config/openstack/clouds.yaml || true
+variables:
+  TF_WORKDIR: "terraform"
+  ANS_DIR1: "ansible-test"
 
-# 캐시 (플러그인/모듈)
-.cache_template:
-  cache:
-    key: "terraform-cache"
-    paths:
-      - terraform/.terraform/
-    policy: pull-push
-
-init:
-  stage: init
-  extends:
-    - .default_template
-    - .cache_template
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "dev"'
-    - if: '$CI_COMMIT_BRANCH == "main"'
-  script:
-    - terraform init -input=false
-  artifacts:
-    paths:
-      - terraform/.terraform/
-    expire_in: 2h
-
-plan:
+# --- Terraform Plan: dev + terraform 변경 시 ---
+tf:plan:
   stage: plan
-  extends:
-    - .default_template
-    - .cache_template
-  needs: ["init"]
+  script:
+    - cd "$TF_WORKDIR"
+    - terraform -version
+    - terraform init -input=false
+    - terraform plan -input=false -detailed-exitcode -out=tfplan || export TF_EXIT=$?
+    - if [ "${TF_EXIT:-0}" = "1" ]; then echo "terraform plan error"; exit 1; fi
+    - if [ "${TF_EXIT:-0}" = "0" ]; then echo "No changes. Stopping."; exit 0; fi
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev"'
-      when: on_success
-    - if: '$CI_COMMIT_BRANCH == "main"'
-      when: on_success
-  script:
-    - terraform fmt -check
-    - terraform validate
-    - terraform plan -input=false -out=tfplan
+      changes:
+        - "terraform/**/*"
+    - when: never
   artifacts:
-    name: "tfplan-$CI_COMMIT_SHORT_SHA"
-    paths:
-      - terraform/tfplan
-      - terraform/.terraform/
+    paths: [ "terraform/tfplan" ]
     expire_in: 1 day
-  allow_failure: false
 
-apply:
+# --- Terraform Apply: main + terraform 변경 시(수동) ---
+tf:apply:
   stage: apply
-  extends:
-    - .default_template
-    - .cache_template
-  needs: ["plan"]
+  needs: ["tf:plan"]
+  script:
+    - cd "$TF_WORKDIR"
+    - terraform -version
+    - terraform init -input=false
+    - test -f tfplan && terraform apply -input=false -auto-approve tfplan || terraform apply -input=false -auto-approve
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
-      when: manual         # 수동 승인
+      when: manual
       allow_failure: false
-    - when: never          # 기타 브랜치 차단
+      changes:
+        - "terraform/**/*"
+    - when: never
+  environment:
+    name: production
+    # 환경 Stop 버튼으로 삭제를 트리거하려면 아래 주석 해제
+    # on_stop: tf:destroy
+
+# --- Ansible Syntax-check: ansible/루트 플레이북 변경 시 ---
+ansible:check:
+  stage: config
   script:
-    - ls -l
-    - terraform show tfplan || true
-    - terraform apply -input=false -auto-approve tfplan
+    - ansible --version
+    - |
+      if [ -f inventory.ini ]; then INV="inventory.ini";
+      elif [ -f "$ANS_DIR1/inventory.ini" ]; then INV="$ANS_DIR1/inventory.ini";
+      else echo "inventory.ini not found"; exit 1; fi
+    - |
+      if [ -f "$ANS_DIR1/site.yml" ]; then
+        ansible-playbook -i "$INV" "$ANS_DIR1/site.yml" --syntax-check;
+      fi
+    - |
+      for p in hosts-fix.yml jenkins-install.yml nginx-install.yml; do
+        if [ -f "$p" ]; then
+          ansible-playbook -i "$INV" "$p" --syntax-check;
+        fi
+      done
+  rules:
+    - changes:
+        - "ansible-test/**/*"
+        - "inventory.ini"
+        - "hosts-fix.yml"
+        - "jenkins-install.yml"
+        - "nginx-install.yml"
+    - when: never
+
+# --- Ansible 실제 적용: 수동 실행 전용 ---
+ansible:apply:
+  stage: config
+  script:
+    - ansible --version
+    - |
+      if [ -f inventory.ini ]; then INV="inventory.ini";
+      elif [ -f "$ANS_DIR1/inventory.ini" ]; then INV="$ANS_DIR1/inventory.ini";
+      else echo "inventory.ini not found"; exit 1; fi
+    - |
+      if [ -f "$ANS_DIR1/site.yml" ]; then
+        ansible-playbook -i "$INV" "$ANS_DIR1/site.yml";
+      fi
+    - |
+      for p in hosts-fix.yml jenkins-install.yml nginx-install.yml; do
+        if [ -f "$p" ]; then
+          ansible-playbook -i "$INV" "$p";
+        fi
+      done
+  when: manual
+  rules:
+    - changes:
+        - "ansible-test/**/*"
+        - "inventory.ini"
+        - "hosts-fix.yml"
+        - "jenkins-install.yml"
+        - "nginx-install.yml"
+    - when: never
+
+# --- Terraform Destroy: 수동(환경 종료용) ---
+tf:destroy:
+  stage: destroy
+  script:
+    - cd "$TF_WORKDIR"
+    - terraform -version
+    - terraform init -input=false
+    # - terraform plan -destroy -input=false   # 필요 시 계획 확인
+    - terraform destroy -auto-approve
+  when: manual
+  allow_failure: false
+  environment:
+    name: production
+    action: stop
