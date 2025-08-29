@@ -1,4 +1,4 @@
-#Host VM IP가 바뀌면 반드시 수정할 것:
+## Host VM IP가 바뀌면 반드시 수정할 것:
 
 DevStack local.conf → HOST_IP 수정 후 재실행
 
