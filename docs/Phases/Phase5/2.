@@ -1,1 +1,187 @@
 
+Phase 5-2: Grafana 설치 및 대시보드 구성 (Prometheus 연동)
+🎯 목표
+
+DevStack Host(Ubuntu)에 Grafana를 설치한다. (기본 포트 : 3000)
+
+Prometheus(9091) 를 데이터소스로 등록한다.
+
+Node Exporter Full 대시보드를 임포트해 VM 리소스를 시각화한다.
+
+0) 전제 조건
+
+Prometheus가 DevStack Host에서 :9091 로 동작 (이미 완료)
+
+모니터링 대상 VM에 Node Exporter :9100 동작 (이미 완료)
+
+(방화벽 사용 시) 3000/TCP 접근 허용
+
+1) Grafana 설치 (Ubuntu)
+1-1. 공식 저장소 추가 후 설치(권장)
+# 1) 필수 도구
+sudo apt update
+sudo apt install -y software-properties-common curl gnupg
+
+# 2) Grafana GPG 키 & 저장소 추가
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL https://packages.grafana.com/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/grafana.gpg
+echo "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://packages.grafana.com/oss/deb stable main" | \
+  sudo tee /etc/apt/sources.list.d/grafana.list
+
+# 3) 설치 & 서비스 시작
+sudo apt update
+sudo apt install -y grafana
+sudo systemctl enable --now grafana-server
+sudo systemctl status grafana-server --no-pager
+
+
+기본 접속: http://<DevStack Host IP>:3000
+최초 로그인: admin / admin → 비밀번호 변경 안내
+
+(선택) 포트가 3000 충돌 시 변경
+sudo sed -i 's/^;http_port = .*/http_port = 3001/' /etc/grafana/grafana.ini
+sudo systemctl restart grafana-server
+
+2) Prometheus 데이터소스 등록
+
+브라우저에서 Grafana 접속 → Login (admin / admin)
+
+좌측 Connections → Data sources → Add data source → Prometheus
+
+HTTP URL 입력
+
+Grafana와 Prometheus가 같은 호스트이면: http://localhost:9091
+
+다른 호스트이면: http://<Prometheus-Host-IP>:9091
+
+Save & test (성공 메시지 확인)
+
+3) 대시보드 임포트 (Node Exporter Full)
+
+좌측 Dashboards → New → Import
+
+Import via grafana.com에 ID 1860 입력 → Load
+
+Prometheus 데이터소스 선택 → Import
+
+대시보드가 로드되면 상단의 Instance(변수)에서 모니터링할 VM 선택
+
+대시보드가 비어 보이면, 우측 상단 시간 범위(Last 1h/6h) 를 넉넉히 잡고 새로고침.
+
+4) 라벨로 식별성 강화(선택)
+
+Prometheus 설정에 라벨을 추가해 두면 대시보드/쿼리에서 VM 식별이 쉬워집니다.
+
+# /etc/prometheus/prometheus.yml (발췌)
+- job_name: 'nodes'
+  static_configs:
+    - targets:
+        - '221.157.174.34:9100'
+      labels:
+        role: 'jenkins'
+        env: 'lab'
+
+
+적용:
+
+sudo systemctl reload prometheus  # 안 되면 restart
+
+
+대시보드 패널/쿼리에서 role="jenkins", env="lab" 필터 가능.
+
+5) 빠른 헬스 체크
+
+Grafana 동작
+
+systemctl is-active grafana-server
+curl -sI http://localhost:3000 | head
+
+
+데이터소스 연결: Grafana UI → Data sources → Prometheus → Save & test
+
+대시보드 데이터: “Node Exporter Full”에서 CPU/메모리/디스크 그래프에 라인이 보이면 OK
+
+6) 자주 쓰는 패널용 PromQL (복붙)
+
+CPU 사용률(%)
+
+100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+
+
+메모리 사용률(%)
+
+(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100
+
+
+루트 디스크 사용률(%)
+
+(1 - (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"})) * 100
+
+
+네트워크 B/s
+
+rate(node_network_receive_bytes_total[5m])
+rate(node_network_transmit_bytes_total[5m])
+
+7) 트러블슈팅
+
+Grafana 접속 불가
+
+서비스 상태: sudo systemctl status grafana-server
+
+포트/방화벽: ss -lntp | grep 3000, UFW/보안그룹 확인
+
+데이터소스 실패
+
+Prometheus URL 확인: curl -s http://<PrometheusIP>:9091/-/ready
+
+네트워크/방화벽(9091) 확인
+
+대시보드 값 없음
+
+Prometheus Targets에서 nodes가 UP인지 확인
+
+시간 범위(Last 1h/6h) 조정, rate(...[5m]) 등 범위 벡터 확인
+
+8) 다음 단계(Phase 5-3 예고)
+
+Alertmanager 연동: CPU/메모리/디스크 임계치 알람 → Slack/Email 알림
+
+대상 자동화: Terraform 출력(IP 리스트)로 Prometheus targets를 자동 갱신(file_sd)
+
+부록 A) (선택) Ansible로 간단 설치
+
+실습에서는 수동 설치로 충분. 자동화를 원하면 아래처럼 최소 태스크로 가능.
+
+# ansible-test/grafana-install.yml (옵션)
+---
+- name: Install Grafana OSS (Ubuntu)
+  hosts: all
+  become: yes
+  vars:
+    ansible_user: ubuntu
+    ansible_python_interpreter: /usr/bin/python3
+  tasks:
+    - apt:
+        name: [software-properties-common, curl, gnupg]
+        state: present
+        update_cache: yes
+    - shell: |
+        install -m 0755 -d /etc/apt/keyrings
+        curl -fsSL https://packages.grafana.com/gpg.key | gpg --dearmor -o /etc/apt/keyrings/grafana.gpg
+        echo "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://packages.grafana.com/oss/deb stable main" > /etc/apt/sources.list.d/grafana.list
+      args: {executable: /bin/bash}
+    - apt:
+        name: grafana
+        state: present
+        update_cache: yes
+    - systemd:
+        name: grafana-server
+        state: started
+        enabled: yes
+
+✅ 요약
+
+Grafana 설치 & 기동(3000) → Prometheus 데이터소스 등록(9091) → Node Exporter Full(1860) 대시보드 임포트
+
+이제 VM 리소스(CPU/메모리/디스크/네트워크) 실시간 모니터링 가능!
