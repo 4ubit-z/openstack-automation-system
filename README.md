@@ -65,38 +65,40 @@ OpenStack 환경에서 GitLab CI/CD, Terraform, Ansible을 활용한 완전 자�
 
 ```
 openstack-automation/
-├── terraform/
-│   ├── main.tf
-│   ├── variables.tf
-│   └── outputs.tf
 ├── ansible/
 │   ├── playbooks/
-│   ├── roles/
-│   └── inventory/
+│      ├── hosts-fix.yml
+│      ├── inventory.yml
+│      ├── jenkins-install.yml
+│      ├── nginx-install.yml
+│      └── node-exporter.yml
+├── terraform/
+│   ├── main.tf
+│   ├── output.tf
+│   ├── providers.tf
+│   └── variables.tf
 ├── gitlab-ci/
-│   ├── .gitlab-ci.yml
+│   ├── .gitlab-ci.yml(repo-root)
 │   └── runners/
-├── monitoring/
-│   ├── prometheus/
-│   ├── grafana/
-│   └── alertmanager/
+│       └── .terraform.ci.yml
+│       └── .ansible.ci.yml
+│       └── .terraform+ansible+monitoring.ci.yml
+│       └── .test.yml
 ├── scripts/
-│   ├── setup-devstack.sh          # OpenStack 초기 설치
-│   ├── backup-system.sh           # 시스템 백업 자동화
-│   ├── health-check.sh            # 서비스 상태 점검
-│   └── automation/
-│       ├── vm-provisioning.sh     # VM 대량 생성 스크립트
-│       └── service-restart.sh     # 서비스 재시작 자동화
+│   ├──
 ├── docs/
+│   ├── Phase/
+│       └── Phase1/
+│       └── Phase2/
+│       └── Phase3/
+│       └── Phase4/
+│       └── Phase5/
+│       └── Phase6/
 │   ├── architecture/
-│   │   ├── system-overview.md     # 전체 시스템 구성도
-│   │   └── network-diagram.png    # 네트워크 토폴로지
+│   │   └── system-overview.md     # 전체 시스템 구성도
 │   ├── operations/
 │   │   ├── daily-checklist.md     # 일일 운영 체크리스트
-│   │   └── backup-procedures.md   # 백업 및 복구 절차
-│   └── troubleshooting/
-│       ├── common-issues.md       # 자주 발생하는 문제들
-│       └── performance-tuning.md  # 성능 최적화 가이드
+│       └── backup-procedures.md   # 백업 및 복구 절차
 └── README.md
 ```
 
