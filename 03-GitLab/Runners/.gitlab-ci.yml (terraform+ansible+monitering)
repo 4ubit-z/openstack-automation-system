@@ -1,0 +1,230 @@
+# gitlab-ci/terraform.ci.yml
+# ─────────────────────────────────────────────────────────
+# 파이프라인 단계
+stages: [plan, apply, configure, destroy]
+
+# 공통 변수
+variables:
+  TF_WORKDIR: "terraform"        # Terraform 코드 디렉토리
+  TF_IN_AUTOMATION: "1"
+  ANSIBLE_DIR: "ansible-test"    # 너의 Ansible 폴더명 (원하면 변경)
+
+# 공통 준비 단계(앵커)
+.tf_setup: &tf_setup
+  - export OS_CLIENT_CONFIG_FILE="$HOME/.config/openstack/clouds.yaml"
+  - export OS_CLOUD="devstack"   # clouds.yaml의 cloud 이름
+  - cd "$TF_WORKDIR"
+  - terraform -version
+  - terraform init -input=false -lock-timeout=60s
+
+# ─────────────────────────────────────────────────────────
+# DEV 브랜치: plan만 실행 (리뷰용)
+tf:plan:
+  stage: plan
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+  before_script:
+    - *tf_setup
+  script:
+    - terraform fmt -check
+    - terraform validate
+    - |
+      set +e
+      terraform plan -no-color -input=false -detailed-exitcode -out=tfplan | tee plan.txt
+      TF_EXIT=$?
+      set -e
+      if [ "$TF_EXIT" = "1" ]; then
+        echo "terraform plan error"; exit 1
+      elif [ "$TF_EXIT" = "0" ]; then
+        echo "No changes"; exit 0
+      else
+        echo "Changes detected (exit 2). Review plan.txt."
+      fi
+  artifacts:
+    paths:
+      - "terraform/plan.txt"
+    expire_in: 1 day
+
+# ─────────────────────────────────────────────────────────
+# MAIN 브랜치: plan 재확인 후 apply (수동 승인)
+tf:apply:
+  stage: apply
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  when: manual
+  allow_failure: false
+  before_script:
+    - *tf_setup
+  script:
+    - |
+      set +e
+      terraform plan -no-color -input=false -detailed-exitcode -out=tfplan | tee plan.txt
+      TF_EXIT=$?
+      set -e
+
+      if [ "$TF_EXIT" = "1" ]; then
+        echo "terraform plan error"; exit 1
+      elif [ "$TF_EXIT" = "0" ]; then
+        echo "No changes. Skip apply."
+        rm -f .changed || true
+        exit 0
+      else
+        echo "Changes detected. Applying…"
+        terraform apply -auto-approve tfplan || terraform apply -auto-approve
+        echo "changes" > .changed
+      fi
+  artifacts:
+    when: always
+    paths:
+      - "terraform/plan.txt"
+      - "terraform/terraform.tfstate"
+      - "terraform/terraform.tfstate.backup"
+      - "terraform/.terraform.lock.hcl"
+      - "terraform/.changed"       # 변경 플래그
+    expire_in: 7 days
+
+# ─────────────────────────────────────────────────────────
+# MAIN 브랜치: apply 이후 Ansible (자동, 변경 있을 때만)
+tf:ansible:
+  stage: configure
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  needs: ["tf:apply"]            # apply 성공 후 이어짐
+  dependencies: ["tf:apply"]     # apply 아티팩트(state/changed) 수신
+  before_script:
+    - *tf_setup                  # 현재 작업디렉토리는 $TF_WORKDIR(=terraform)
+    - export PATH="$HOME/.local/bin:$PATH"
+    - python3 -m pip install --user --upgrade pip
+    - python3 -m pip install --user ansible==8.7.0
+    - mkdir -p ~/.ssh
+    - export ANSIBLE_HOST_KEY_CHECKING=False   # known_hosts 충돌 방지
+    # 키 주입(권장: 변수 사용)
+    - |
+      if [ -n "${ANSIBLE_PRIVATE_KEY_B64:-}" ]; then
+        echo "$ANSIBLE_PRIVATE_KEY_B64" | base64 -d > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+      elif [ -f ~/.ssh/mykey ]; then
+        # (대안) 러너에 미리 둔 키 사용
+        cp ~/.ssh/mykey ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+      fi
+  script:
+    - |
+      set -e
+      # 0) 변경 없으면 스킵
+      if [ ! -f .changed ]; then
+        echo "No infra changes; skip Ansible."
+        exit 0
+      fi
+
+      # 1) 접속 대상 IP (floating_ip 우선)
+      TARGET_HOST=$(terraform output -raw floating_ip 2>/dev/null || true)
+      if [ -z "$TARGET_HOST" ] || [ "$TARGET_HOST" = "null" ]; then
+        TARGET_HOST=$(terraform output -raw instance_ip 2>/dev/null || true)
+      fi
+      [ -z "$TARGET_HOST" ] || [ "$TARGET_HOST" = "null" ] && { echo "ERROR: no target IP"; exit 1; }
+      echo "TARGET_HOST=$TARGET_HOST"
+
+      ANS_USER="${ANSIBLE_USER:-ubuntu}"
+
+      # 2) 기존 호스트키 제거 후 새 키 등록(재활용 IP 대비)
+      ssh-keygen -R "$TARGET_HOST" -f ~/.ssh/known_hosts 2>/dev/null || true
+      ssh-keyscan -T 5 -H "$TARGET_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      # 3) SSH 열릴 때까지 대기 (포트 22, 최대 5분)
+      ansible -i localhost, all -c local -m wait_for -a "host=${TARGET_HOST} port=22 delay=2 timeout=300 state=started"
+
+      # 4) 키 유무에 따라 옵션 분기
+      if [ -f ~/.ssh/id_rsa ]; then
+        SSH_ARGS="--private-key ~/.ssh/id_rsa"; EXTRA=""
+      else
+        SSH_ARGS=""; EXTRA='-e ansible_ssh_common_args="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"'
+      fi
+
+      # 5) 연결 확인(3회 재시도)
+      n=0
+      until [ $n -ge 3 ]; do
+        if ansible -i "$TARGET_HOST," all -u "$ANS_USER" $SSH_ARGS $EXTRA -m ping; then
+          break
+        fi
+        n=$((n+1)); echo "Retrying ansible ping ($n/3)…"; sleep 5
+      done
+      [ $n -lt 3 ] || { echo "Ansible ping failed after retries"; exit 1; }
+
+      # 6) 플레이북 실행 순서: hosts-fix → nginx → jenkins
+      ansible-playbook -i "$TARGET_HOST," -u "$ANS_USER" $SSH_ARGS $EXTRA "$CI_PROJECT_DIR/${ANSIBLE_DIR}/hosts-fix.yml"
+      ansible-playbook -i "$TARGET_HOST," -u "$ANS_USER" $SSH_ARGS $EXTRA "$CI_PROJECT_DIR/${ANSIBLE_DIR}/nginx-install.yml"
+      ansible-playbook -i "$TARGET_HOST," -u "$ANS_USER" $SSH_ARGS $EXTRA "$CI_PROJECT_DIR/${ANSIBLE_DIR}/jenkins-install.yml"
+      ansible-playbook -i "$TARGET_HOST," -u "$ANS_USER" $SSH_ARGS $EXTRA "$CI_PROJECT_DIR/${ANSIBLE_DIR}/node-exporter.yml"
+
+# (옵션) MAIN 브랜치: Ansible만 수동 재실행
+tf:ansible:manual:
+  stage: configure
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  when: manual
+  needs: ["tf:apply"]
+  dependencies: ["tf:apply"]
+  before_script:
+    - *tf_setup
+    - export PATH="$HOME/.local/bin:$PATH"
+    - python3 -m pip install --user --upgrade pip
+    - python3 -m pip install --user ansible==8.7.0
+    - mkdir -p ~/.ssh
+    - export ANSIBLE_HOST_KEY_CHECKING=False
+    - |
+      if [ -n "${ANSIBLE_PRIVATE_KEY_B64:-}" ]; then
+        echo "$ANSIBLE_PRIVATE_KEY_B64" | base64 -d > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+      elif [ -f ~/.ssh/mykey ]; then
+        cp ~/.ssh/mykey ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+      fi
+  script:
+    - |
+      set -e
+      TARGET_HOST=$(terraform output -raw floating_ip 2>/dev/null || true)
+      if [ -z "$TARGET_HOST" ] || [ "$TARGET_HOST" = "null" ]; then
+        TARGET_HOST=$(terraform output -raw instance_ip 2>/dev/null || true)
+      fi
+      [ -z "$TARGET_HOST" ] || [ "$TARGET_HOST" = "null" ] && { echo "No target IP"; exit 1; }
+      echo "TARGET_HOST=$TARGET_HOST"
+
+      ANS_USER="${ANSIBLE_USER:-ubuntu}"
+
+      ssh-keygen -R "$TARGET_HOST" -f ~/.ssh/known_hosts 2>/dev/null || true
+      ssh-keyscan -T 5 -H "$TARGET_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      ansible -i localhost, all -c local -m wait_for -a "host=${TARGET_HOST} port=22 delay=2 timeout=300 state=started"
+
+      if [ -f ~/.ssh/id_rsa ]; then
+        SSH_ARGS="--private-key ~/.ssh/id_rsa"; EXTRA=""
+      else
+        SSH_ARGS=""; EXTRA='-e ansible_ssh_common_args="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"'
+      fi
+
+      ansible -i "$TARGET_HOST," all -u "$ANS_USER" $SSH_ARGS $EXTRA -m ping
+      ansible-playbook -i "$TARGET_HOST," -u "$ANS_USER" $SSH_ARGS $EXTRA "$CI_PROJECT_DIR/${ANSIBLE_DIR}/hosts-fix.yml"
+      ansible-playbook -i "$TARGET_HOST," -u "$ANS_USER" $SSH_ARGS $EXTRA "$CI_PROJECT_DIR/${ANSIBLE_DIR}/nginx-install.yml"
+      ansible-playbook -i "$TARGET_HOST," -u "$ANS_USER" $SSH_ARGS $EXTRA "$CI_PROJECT_DIR/${ANSIBLE_DIR}/jenkins-install.yml"
+
+# ─────────────────────────────────────────────────────────
+# MAIN 브랜치: destroy (환경변수로 이중 안전장치)
+tf:destroy:
+  stage: destroy
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  when: manual
+  allow_failure: false
+  dependencies: ["tf:apply"]     # apply 아티팩트(state) 받아서 파괴
+  before_script:
+    - *tf_setup
+  script:
+    - |
+      if [ -z "${DESTROY_OK:-}" ]; then
+        echo "DESTROY_OK variable not set, aborting"; exit 1
+      fi
+      terraform state list || true
+      echo "Destroy confirmed: $DESTROY_OK"
+      terraform destroy -auto-approve -lock-timeout=60s
+
