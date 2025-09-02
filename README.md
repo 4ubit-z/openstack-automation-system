@@ -87,6 +87,11 @@ openstack-automation/
 ├── scripts/
 │   ├──
 ├── docs/
+│   ├── architecture/
+│   │   └── system-overview.md     # 전체 시스템 구성도
+│   ├── operations/
+│   │   ├── daily-checklist.md     # 일일 운영 체크리스트
+│   │   └── backup-procedures.md   # 백업 및 복구 절차
 │   ├── Phase/
 │       └── Phase1/
 │       └── Phase2/
@@ -94,11 +99,6 @@ openstack-automation/
 │       └── Phase4/
 │       └── Phase5/
 │       └── Phase6/
-│   ├── architecture/
-│   │   └── system-overview.md     # 전체 시스템 구성도
-│   ├── operations/
-│   │   ├── daily-checklist.md     # 일일 운영 체크리스트
-│       └── backup-procedures.md   # 백업 및 복구 절차
 └── README.md
 ```
 
