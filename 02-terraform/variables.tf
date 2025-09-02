@@ -6,7 +6,7 @@ variable "instance_name" {
 
 variable "image_id" {
   description = "이미지 UUID"
-  default     = "d714507c-3a35-4020-ac27-c58fa93ac4f3"
+  default     = "#Image ID"
 }
 
 variable "flavor_name" {
