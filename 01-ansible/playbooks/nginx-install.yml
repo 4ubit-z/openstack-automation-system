@@ -1,8 +1,11 @@
 ---
 # Nginx 설치 및 서비스 실행
-- name: Install and start Nginx on web server
-  hosts: web                  # 대상 호스트 그룹
+- name: Install and start Nginx on target server
+  hosts: all                  # 인벤토리 전체 → CI에선 단일 IP만 적용됨
   become: yes                 # root 권한 사용
+  vars:
+    ansible_user: ubuntu
+    ansible_python_interpreter: /usr/bin/python3
 
   tasks:
     - name: Update apt cache
