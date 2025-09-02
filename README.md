@@ -92,7 +92,7 @@ openstack-automation/
 │   ├── operations/
 │   │   ├── daily-checklist.md     # 일일 운영 체크리스트
 │   │   └── backup-procedures.md   # 백업 및 복구 절차
-│   ├── Phase/
+│   └── Phase/
 │       └── Phase1/
 │       └── Phase2/
 │       └── Phase3/
