@@ -1,12 +1,61 @@
-- name: Fix /etc/hosts to match hostname
+---
+- name: Fix /etc/hosts to match hostname and set DNS
   hosts: all
   become: true
+  vars:
+    ansible_user: ubuntu
+    ansible_python_interpreter: /usr/bin/python3
 
   tasks:
+    - name: Get current hostname
+      command: hostname
+      register: current_hostname
+      changed_when: false
+
     - name: Add hostname to 127.0.0.1 line if not present
       lineinfile:
         path: /etc/hosts
         regexp: '^127\.0\.0\.1'
-        line: '127.0.0.1   localhost tf-instance'
+        line: "127.0.0.1 localhost {{ current_hostname.stdout }}"
         state: present
         backup: yes
+
+    - name: Verify /etc/hosts content
+      command: cat /etc/hosts
+      register: hosts_content
+      changed_when: false
+
+    - name: Display /etc/hosts content
+      debug:
+        var: hosts_content.stdout_lines
+
+    # ──────────────────────────────
+    # resolv.conf 처리
+    - name: Remove broken resolv.conf symlink if exists
+      file:
+        path: /etc/resolv.conf
+        state: absent
+      when: ansible_facts['os_family'] == "Debian"
+
+    - name: Ensure resolv.conf file exists
+      copy:
+        dest: /etc/resolv.conf
+        content: ""
+        mode: '0644'
+
+    - name: Ensure Google DNS is first in resolv.conf
+      lineinfile:
+        path: /etc/resolv.conf
+        line: "nameserver 8.8.8.8"
+        insertbefore: BOF
+        state: present
+        backup: yes
+
+    - name: Verify /etc/resolv.conf content
+      command: cat /etc/resolv.conf
+      register: resolv_content
+      changed_when: false
+
+    - name: Display /etc/resolv.conf content
+      debug:
+        var: resolv_content.stdout_lines
