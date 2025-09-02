@@ -1,0 +1,237 @@
+# 모니터링 알림 구축 가이드
+
+## 목표
+
+DevStack Host에 Prometheus, Grafana, Alertmanager로 구성된 완전한 모니터링 스택을 구축하고, OpenStack VM들을 모니터링하며 기본 알림 규칙을 적용함.
+
+## 아키텍처 및 포트 구성
+
+```
+[DevStack Host]
+├── Prometheus :9091     ← 메트릭 수집
+├── Grafana    :3000     ← 대시보드
+├── Alertmanager :9096   ← 알림 관리 (cluster :9097)
+└── ↓ 모니터링 대상
+    [OpenStack VMs]
+    └── Node Exporter :9100  (예: 221.157.174.34:9100)
+```
+
+**참고**: GitLab 내장 서비스들이 표준 포트(9090/9093)를 사용하므로 커스텀 포트 사용
+
+## 전제 조건
+
+- DevStack Host: Ubuntu 환경, sudo 권한
+- VM 보안그룹: Prometheus 호스트에서 9100 포트 접근 허용
+- GitLab Runner 파이프라인으로 VM 생성 및 Ansible 실행 환경
+
+## Phase 1: Prometheus + Node Exporter 구성
+
+### Prometheus 설치
+
+```bash
+sudo apt update
+sudo apt install -y prometheus promtool
+```
+
+### 설정 파일 구성
+
+`/etc/prometheus/prometheus.yml`
+
+```yaml
+global:
+  scrape_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['localhost:9096']   # Alertmanager 연결
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9091']
+
+  - job_name: 'nodes'
+    static_configs:
+      - targets:
+          - '221.157.174.34:9100'     # 모니터링할 VM IP (필요시 추가)
+```
+
+### 포트 변경 설정 (9091 바인딩)
+
+```bash
+sudo mkdir -p /etc/systemd/system/prometheus.service.d
+sudo tee /etc/systemd/system/prometheus.service.d/override.conf >/dev/null <<'EOF'
+[Service]
+EnvironmentFile=
+ExecStart=
+ExecStart=/usr/bin/prometheus \
+  --config.file=/etc/prometheus/prometheus.yml \
+  --storage.tsdb.path=/var/lib/prometheus \
+  --web.listen-address=0.0.0.0:9091 \
+  --web.console.templates=/usr/share/prometheus/consoles \
+  --web.console.libraries=/usr/share/prometheus/console_libraries
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now prometheus
+```
+
+### 설치 확인
+
+```bash
+curl -s http://localhost:9091/-/ready
+sudo ss -lntp | grep :9091
+```
+
+- Prometheus UI: `http://<HOST_IP>:9091/targets`에서 prometheus, nodes가 UP 상태 확인
+- VM Node Exporter 확인: `curl http://<VM_IP>:9100/metrics`
+
+## Phase 2: Grafana 설치 및 대시보드 구성
+
+### Grafana 설치
+
+```bash
+sudo apt update
+sudo apt install -y software-properties-common curl gnupg
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL https://packages.grafana.com/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/grafana.gpg
+echo "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://packages.grafana.com/oss/deb stable main" | \
+  sudo tee /etc/apt/sources.list.d/grafana.list
+sudo apt update
+sudo apt install -y grafana
+sudo systemctl enable --now grafana-server
+```
+
+### 데이터소스 및 대시보드 설정
+
+1. Grafana 접속: `http://<HOST_IP>:3000` (초기 로그인: admin/admin)
+2. **Data sources → Add data source → Prometheus**
+   - URL: `http://localhost:9091`
+   - **Save & test** 클릭
+3. **Dashboards → Import**
+   - ID `1860` (Node Exporter Full) 입력 → Load
+   - 데이터소스로 Prometheus 선택 → Import
+4. 상단 Instance에서 `221.157.174.34:9100` 선택하여 메트릭 확인
+
+## Phase 3: Alertmanager 설치 및 알림 규칙
+
+### Alertmanager 설치
+
+```bash
+sudo apt update
+sudo apt install -y prometheus-alertmanager
+```
+
+### 기본 설정 파일
+
+`/etc/alertmanager/alertmanager.yml`
+
+```yaml
+route:
+  receiver: "devnull"
+  group_by: ["alertname","instance"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 2h
+
+receivers:
+  - name: "devnull"
+```
+
+### 포트 설정 (9096/9097 사용)
+
+```bash
+sudo tee /etc/default/prometheus-alertmanager >/dev/null <<'EOF'
+ARGS="--config.file=/etc/alertmanager/alertmanager.yml --storage.path=/var/lib/alertmanager --web.listen-address=0.0.0.0:9096 --cluster.listen-address=0.0.0.0:9097"
+EOF
+sudo chown -R prometheus:prometheus /etc/alertmanager /var/lib/alertmanager
+sudo systemctl daemon-reload
+sudo systemctl enable --now prometheus-alertmanager
+```
+
+### Alertmanager 동작 확인
+
+```bash
+sudo ss -lntp | egrep ':9096|:9097'
+curl -s http://localhost:9096/-/ready
+```
+
+- Alertmanager UI: `http://<HOST_IP>:9096`
+
+### 알림 규칙 생성
+
+```bash
+sudo mkdir -p /etc/prometheus/rules
+sudo tee /etc/prometheus/rules/node-alerts.yml >/dev/null <<'YML'
+groups:
+- name: node-basics
+  rules:
+  - alert: NodeDown
+    expr: up{job="nodes"} == 0
+    for: 1m
+    labels: {severity: critical}
+    annotations:
+      summary: "Node down: {{ $labels.instance }}"
+
+  - alert: HighCPU
+    expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{job="nodes",mode="idle"}[5m])) * 100) > 85
+    for: 5m
+    labels: {severity: warning}
+    annotations:
+      summary: "High CPU on {{ $labels.instance }}"
+YML
+
+sudo promtool check rules /etc/prometheus/rules/node-alerts.yml
+sudo systemctl reload prometheus || sudo systemctl restart prometheus
+```
+
+## 알림 테스트
+
+### NodeDown 알림 테스트
+
+```bash
+# 대상 VM에서 Node Exporter 중지
+sudo systemctl stop node_exporter
+
+# 1~2분 후 Alertmanager UI(9096)에서 firing 상태 확인
+
+# Node Exporter 재시작
+sudo systemctl start node_exporter
+```
+
+## 최종 검증 체크리스트
+
+### 서비스 상태 확인
+
+```bash
+# Prometheus 상태
+curl -s http://localhost:9091/-/ready
+
+# Grafana 상태  
+curl -sI http://localhost:3000 | head
+
+# Alertmanager 상태
+curl -s http://localhost:9096/-/ready
+
+# Node Exporter 상태 (VM에서)
+curl -s http://localhost:9100/metrics | head
+```
+
+### UI 접속 확인
+
+- **Prometheus**: `http://<HOST_IP>:9091/targets` - 모든 타겟이 UP 상태
+- **Grafana**: `http://<HOST_IP>:3000` - Node Exporter 대시보드에서 메트릭 표시
+- **Alertmanager**: `http://<HOST_IP>:9096` - 알림 상태 확인
+
+## 완성된 모니터링 스택
+
+이제 다음 기능들이 모두 동작함:
+
+- **메트릭 수집**: Prometheus가 VM들의 시스템 메트릭 수집
+- **시각화**: Grafana 대시보드로 실시간 모니터링
+- **알림**: NodeDown, HighCPU 등 기본 알림 규칙 동작
+- **확장성**: 추가 VM 및 알림 규칙 쉽게 확장 가능
