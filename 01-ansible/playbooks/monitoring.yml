@@ -1,0 +1,142 @@
+---
+- name: Install and run Node Exporter
+  hosts: all
+  become: yes
+  gather_facts: false   # ← python3 보장 전에는 facts 수집 금지
+  vars:
+    node_exporter_version: "1.8.1"
+    node_exporter_user: "node_exporter"
+
+  pre_tasks:
+    # 0) 리모트에 python3 없으면 먼저 설치 (facts 수집에 필요)
+    - name: Ensure python3 exists (for Ansible modules)
+      raw: test -x /usr/bin/python3 || (apt-get update -y && apt-get install -y python3)
+      changed_when: false
+      become: yes
+
+    # 1) 이제 facts 수집
+    - name: Gather facts
+      setup:
+
+    # 2) 릴리즈/아키텍처 파악
+    - name: Detect Ubuntu codename and architecture
+      set_fact:
+        ubuntu_codename: "{{ ansible_distribution_release | default(ansible_lsb.codename) }}"
+        arch: "{{ (ansible_architecture | lower) }}"
+
+    # 3) sources.list의 잘못된 'ports' 라인 정리 (두 형태 모두 제거)
+    - name: Remove stray lines starting with 'ports'
+      lineinfile:
+        path: /etc/apt/sources.list
+        regexp: '^ports'
+        state: absent
+      become: yes
+
+    - name: Remove wrong 'deb ports...' lines
+      lineinfile:
+        path: /etc/apt/sources.list
+        regexp: '^(deb|deb-src)\s+ports(\.|:)'
+        state: absent
+      become: yes
+
+    # 4) 올바른 미러 재작성 (amd64 ↔ arm 자동 분기, 릴리즈 자동 반영)
+    - name: Write proper Ubuntu sources.list
+      copy:
+        dest: /etc/apt/sources.list
+        mode: "0644"
+        content: |
+          {% if arch in ['x86_64','amd64'] %}
+          deb http://archive.ubuntu.com/ubuntu {{ ubuntu_codename }} main restricted universe multiverse
+          deb http://archive.ubuntu.com/ubuntu {{ ubuntu_codename }}-updates main restricted universe multiverse
+          deb http://security.ubuntu.com/ubuntu {{ ubuntu_codename }}-security main restricted universe multiverse
+          {% else %}
+          # non-amd64 (e.g., arm64/aarch64) uses ports
+          deb http://ports.ubuntu.com/ubuntu-ports {{ ubuntu_codename }} main restricted universe multiverse
+          deb http://ports.ubuntu.com/ubuntu-ports {{ ubuntu_codename }}-updates main restricted universe multiverse
+          deb http://ports.ubuntu.com/ubuntu-ports {{ ubuntu_codename }}-security main restricted universe multiverse
+          {% endif %}
+      become: yes
+
+    # 5) apt 캐시 갱신 (네트워크 흔들림 대비 재시도)
+    - name: Update apt cache (with retries)
+      apt:
+        update_cache: yes
+      register: apt_update_result
+      retries: 3
+      delay: 5
+      until: apt_update_result is succeeded
+      become: yes
+
+    # 6) Node Exporter 다운로드 URL/디렉터리(아키텍처별) 계산
+    - name: Compute Node Exporter archive/dir by arch
+      set_fact:
+        ne_pkg_arch: >-
+          {{ 'linux-amd64' if arch in ['x86_64','amd64'] else
+             'linux-arm64' if arch in ['aarch64','arm64'] else
+             'linux-amd64' }}
+        node_exporter_dir: "/opt/node_exporter-{{ node_exporter_version }}.{{ ne_pkg_arch }}"
+        node_exporter_url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.{{ ne_pkg_arch }}.tar.gz"
+        ansible_python_interpreter: /usr/bin/python3
+
+  tasks:
+    - name: Create node_exporter system user
+      user:
+        name: "{{ node_exporter_user }}"
+        shell: /usr/sbin/nologin
+        system: yes
+        create_home: no
+
+    - name: Download Node Exporter tarball
+      get_url:
+        url: "{{ node_exporter_url }}"
+        dest: /tmp/node_exporter.tar.gz
+        mode: "0644"
+        force: no
+
+    - name: Extract Node Exporter
+      unarchive:
+        src: /tmp/node_exporter.tar.gz
+        dest: /opt/
+        remote_src: yes
+        creates: "{{ node_exporter_dir }}"
+
+    - name: Install binary symlink
+      file:
+        src: "{{ node_exporter_dir }}/node_exporter"
+        dest: /usr/local/bin/node_exporter
+        state: link
+        force: yes
+
+    - name: Create systemd unit
+      copy:
+        dest: /etc/systemd/system/node_exporter.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Prometheus Node Exporter
+          After=network.target
+
+          [Service]
+          User={{ node_exporter_user }}
+          Group={{ node_exporter_user }}
+          ExecStart=/usr/local/bin/node_exporter --web.listen-address=:9100
+          Restart=always
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Reload systemd and enable/start service
+      systemd:
+        name: node_exporter
+        daemon_reload: yes
+        enabled: yes
+        state: started
+
+    - name: Verify service is active
+      command: systemctl is-active node_exporter
+      register: svc
+      changed_when: false
+
+    - debug:
+        msg: "node_exporter is {{ svc.stdout }} and listening on :9100"
