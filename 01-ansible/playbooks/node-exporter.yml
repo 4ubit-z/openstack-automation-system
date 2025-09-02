@@ -1,0 +1,53 @@
+---
+- name: Install Node Exporter (simple version)
+  hosts: all
+  become: yes
+  vars:
+    ansible_user: ubuntu
+    ansible_python_interpreter: /usr/bin/python3
+    node_exporter_version: "1.8.2"
+
+  tasks:
+    - name: Add node_exporter user
+      user:
+        name: nodeexp
+        system: yes
+        shell: /usr/sbin/nologin
+        create_home: no
+
+    - name: Download node_exporter
+      get_url:
+        url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
+        dest: /tmp/node_exporter.tar.gz
+        mode: "0644"
+
+    - name: Extract node_exporter
+      unarchive:
+        src: /tmp/node_exporter.tar.gz
+        dest: /usr/local/bin/
+        remote_src: yes
+        extra_opts: ["--strip-components=1"]
+
+    - name: Create systemd service
+      copy:
+        dest: /etc/systemd/system/node_exporter.service
+        content: |
+          [Unit]
+          Description=Prometheus Node Exporter
+          After=network-online.target
+
+          [Service]
+          User=nodeexp
+          ExecStart=/usr/local/bin/node_exporter --web.listen-address=":9100"
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: Restart node_exporter
+
+  handlers:
+    - name: Restart node_exporter
+      systemd:
+        name: node_exporter
+        state: restarted
+        enabled: yes
