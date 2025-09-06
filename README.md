@@ -8,7 +8,7 @@
 
 - **Infrastructure as Code (IaC)**: Terraform으로 VM, 네트워크, 스토리지 자동 관리
 - **Configuration Management**: Ansible로 서비스 설치 및 초기 설정 자동화
-- **Version Control**: Git을 통한 코드 버전 관리 및 협업
+- **Version Control**: Git을 통한 코드 버전 관리
 - **CI/CD**: GitLab + Runner, Jenkins로 지속적 통합 및 배포 파이프라인 구성
 - **Monitoring & Alerting**: Prometheus + Grafana + Alertmanager로 상태 수집/시각화/알람
 - **Auto-Recovery**: Alertmanager 웹훅 → Jenkins → 자동 복구 스크립트 실행
