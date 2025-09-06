@@ -28,8 +28,8 @@
 
 ### Phase 4: CI/CD 파이프라인 구축
 - GitLab 저장소 생성, Runner 등록
+- Git 브랜치 전략(dev → main) 기반 워크플로우
 - `.gitlab-ci.yml` 작성 → Terraform/Ansible Job 자동화
-- 브랜치 전략(dev → main) 기반 파이프라인 실행
 
 ### Phase 5: 모니터링 시스템 구성
 - Prometheus 서버로 메트릭 수집
@@ -146,10 +146,9 @@ Ansible로 VM 내부 서비스 설치 및 초기 설정 (Nginx, Jenkins, Node Ex
 ```mermaid
 graph TB
     subgraph "OpenStack Infrastructure"
-        VM1[VM Instance 1]
-        VM2[VM Instance 2]
+        VM[VM Instance]
         NET[Network/Security Groups]
-        FIP[Floating IPs]
+        FIP[Floating IP]
     end
     
     subgraph "CI/CD Pipeline"
@@ -159,7 +158,7 @@ graph TB
         ANS[Ansible]
     end
     
-    subgraph "Services"
+    subgraph "VM Services"
         NGX[Nginx]
         JNK[Jenkins]
         NE[Node Exporter]
@@ -174,13 +173,13 @@ graph TB
     GL --> GR
     GR --> TF
     GR --> ANS
-    TF --> VM1
-    TF --> VM2
+    TF --> VM
     TF --> NET
     TF --> FIP
-    ANS --> NGX
-    ANS --> JNK
-    ANS --> NE
+    ANS --> VM
+    VM --> NGX
+    VM --> JNK
+    VM --> NE
     NE --> PROM
     PROM --> GRF
     PROM --> AM
