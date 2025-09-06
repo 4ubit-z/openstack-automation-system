@@ -6,8 +6,9 @@
 
 ### 주요 특징
 
-- **Infra as Code (IaC)**: Terraform으로 VM, 네트워크, 스토리지 자동 관리
+- **Infrastructure as Code (IaC)**: Terraform으로 VM, 네트워크, 스토리지 자동 관리
 - **Configuration Management**: Ansible로 서비스 설치 및 초기 설정 자동화
+- **Version Control**: Git을 통한 코드 버전 관리 및 협업
 - **CI/CD**: GitLab + Runner, Jenkins로 지속적 통합 및 배포 파이프라인 구성
 - **Monitoring & Alerting**: Prometheus + Grafana + Alertmanager로 상태 수집/시각화/알람
 - **Auto-Recovery**: Alertmanager 웹훅 → Jenkins → 자동 복구 스크립트 실행
@@ -21,6 +22,7 @@
 ### Phase 2: 인프라 자동화
 - Terraform으로 VM 인스턴스, 네트워크, 보안 그룹, 스토리지 생성
 - Terraform state 파일 기반 버전 관리
+- Git을 통한 IaC 코드 버전 관리
 
 ### Phase 3: 서비스 구성 자동화
 - Ansible 플레이북으로 서비스 자동 배포
@@ -30,6 +32,7 @@
 - GitLab 저장소 생성, Runner 등록
 - Git 브랜치 전략(dev → main) 기반 워크플로우
 - `.gitlab-ci.yml` 작성 → Terraform/Ansible Job 자동화
+- 브랜치 전략(dev → main) 기반 파이프라인 실행
 
 ### Phase 5: 모니터링 시스템 구성
 - Prometheus 서버로 메트릭 수집
@@ -106,6 +109,7 @@ openstack-automation/
 ### Infrastructure & Platform
 - **클라우드 플랫폼**: OpenStack (DevStack)
 - **가상화**: VMware Workstation Pro
+- **버전 관리**: Git
 
 ### DevOps Tools
 - **IaC**: Terraform
@@ -121,21 +125,24 @@ openstack-automation/
 
 ## 시스템 동작 흐름
 
-### 1. Provisioning
+### 1. Version Control
+Git을 통한 코드 버전 관리 및 협업 (Terraform, Ansible, CI/CD 스크립트)
+
+### 2. Provisioning
 Terraform으로 OpenStack 자원 자동 생성 (VM, 네트워크, 보안 그룹, Floating IP 등)
 
-### 2. Configuration
+### 3. Configuration
 Ansible로 VM 내부 서비스 설치 및 초기 설정 (Nginx, Jenkins, Node Exporter 등)
 
-### 3. CI/CD
+### 4. CI/CD
 - GitLab + Runner로 코드 변경 시 Terraform/Ansible 자동 실행
 - Jenkins는 부하 테스트 및 장애 복구 스크립트 실행 담당
 
-### 4. Monitoring
+### 5. Monitoring
 - Prometheus로 지표 수집, Grafana로 시각화
 - Alertmanager로 알람 관리
 
-### 5. Failure & Recovery
+### 6. Failure & Recovery
 1. 장애 발생 (서비스 다운, 포트 차단, CPU 스파이크 등)
 2. Prometheus 규칙 → Alertmanager → Jenkins 웹훅
 3. 자동 복구 스크립트 실행
@@ -145,6 +152,10 @@ Ansible로 VM 내부 서비스 설치 및 초기 설정 (Nginx, Jenkins, Node Ex
 
 ```mermaid
 graph TB
+    subgraph "Version Control"
+        GIT[Git Repository]
+    end
+    
     subgraph "OpenStack Infrastructure"
         VM[VM Instance]
         NET[Network/Security Groups]
@@ -170,6 +181,7 @@ graph TB
         AM[Alertmanager]
     end
     
+    GIT --> GL
     GL --> GR
     GR --> TF
     GR --> ANS
