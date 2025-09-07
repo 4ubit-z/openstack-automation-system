@@ -72,7 +72,15 @@ resource "openstack_networking_secgroup_rule_v2" "secgroup_rule_gitlab" {
   remote_ip_prefix  = "0.0.0.0/0"
   security_group_id = openstack_networking_secgroup_v2.secgroup_ssh.id
 }
-
+resource "openstack_networking_secgroup_rule_v2" "allow_node_exporter" {
+  direction         = "ingress"
+  ethertype         = "IPv4"
+  protocol          = "tcp"
+  port_range_min    = 9100
+  port_range_max    = 9100
+  remote_ip_prefix  = "0.0.0.0/0"   # 운영은 Prometheus 호스트 IP/32로 제한
+  security_group_id = openstack_networking_secgroup_v2.monitor_sg.id
+}
 
 # Floating IP 생성
 resource "openstack_networking_floatingip_v2" "fip_1" {
